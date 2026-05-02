@@ -1,0 +1,7 @@
+{
+  "issuer": "secret://AGENT_OS_JWT_ISSUER",
+  "audience": "secret://AGENT_OS_JWT_AUDIENCE",
+  "jwks_url": "secret://AGENT_OS_JWT_JWKS_URL",
+  "public_key_path": "secret://AGENT_OS_JWT_PUBLIC_KEY_PATH",
+  "clock_skew_seconds": 60
+}

@@ -1,1 +1,8 @@
-docs/*
+.agent-os/
+.agent-os-beta-smoke/
+.agent-os-example-*/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+dist/

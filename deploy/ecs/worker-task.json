@@ -1,0 +1,35 @@
+{
+  "family": "factorymind-agentos-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::123456789012:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::123456789012:role/agentOsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "factorymind-agentos-worker",
+      "image": "factorymind-agentos:latest",
+      "essential": true,
+      "command": ["agent-os", "worker", "run"],
+      "environment": [
+        {"name": "AGENT_OS_ENV", "value": "${AGENT_OS_ENV}"},
+        {"name": "AGENT_OS_POSTGRES_DSN", "value": "${AGENT_OS_POSTGRES_DSN}"},
+        {"name": "AGENT_OS_REDIS_URL", "value": "${AGENT_OS_REDIS_URL}"},
+        {"name": "AGENT_OS_JWT_ISSUER", "value": "${AGENT_OS_JWT_ISSUER}"},
+        {"name": "AGENT_OS_JWT_AUDIENCE", "value": "${AGENT_OS_JWT_AUDIENCE}"},
+        {"name": "OPENAI_API_KEY", "value": "${OPENAI_API_KEY}"},
+        {"name": "OTEL_SERVICE_NAME", "value": "${OTEL_SERVICE_NAME}"},
+        {"name": "OTEL_EXPORTER_OTLP_ENDPOINT", "value": "${OTEL_EXPORTER_OTLP_ENDPOINT}"}
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "echo ok"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      }
+    }
+  ]
+}
+

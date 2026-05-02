@@ -1,0 +1,8 @@
+{
+  "mode": "openai",
+  "openai_api_key": "secret://OPENAI_API_KEY",
+  "openai_base_url": "secret://OPENAI_BASE_URL",
+  "openai_timeout_ms": 20000,
+  "openai_max_retries": 1,
+  "default_token_budget": 2500
+}
