@@ -7,8 +7,10 @@ Current status: `v1.3.0` (stable).
 ## Install
 
 ```bash
-pip install agent-os==1.3.0
+pip install factorymind-agent-os==1.3.0
 ```
+
+PyPI: [factorymind-agent-os](https://pypi.org/project/factorymind-agent-os/1.3.0/)
 
 For local repo usage:
 

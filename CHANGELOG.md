@@ -10,6 +10,7 @@
 - Practical validation passed for:
   - structured output mode (`output_mode=json_schema`) with typed `content_json`,
   - pgvector retrieval path on vector-capable Postgres backend.
+- PyPI package published as `factorymind-agent-os` (`1.3.0`) to satisfy project-name uniqueness policy.
 
 ### Agent Output Contract
 - Added dual output modes on `AgentDefinition`:
