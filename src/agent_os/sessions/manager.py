@@ -25,6 +25,7 @@ class SessionManager:
         self.store = store
         self.runtime = runtime
         self.context = context
+        self.on_accept = None
 
     def init(self, agent_id: str, input: str) -> Session:
         agent = self.store.load_agent(agent_id)
@@ -52,7 +53,13 @@ class SessionManager:
             cfg = getattr(self.runtime, "config", None)
             if cfg is not None:
                 budget = int(getattr(cfg, "default_token_budget", 2500))
-            context = self.context.build(agent_id=agent.id, active_input=input_text, events=events, token_budget=budget)
+            context = self.context.build(
+                agent_id=agent.id,
+                active_input=input_text,
+                events=events,
+                token_budget=budget,
+                agent_tier=agent.agent_tier,
+            )
         output = self.runtime.run(agent=agent, events=events, input_text=input_text, context=context)
         self.store.append_event(
             SessionEvent(
@@ -92,6 +99,8 @@ class SessionManager:
             agent_version=agent.version,
         )
         self.store.append_event(event)
+        if callable(self.on_accept):
+            self.on_accept(session_id=session_id, agent_id=agent.id)
         return event
 
     def events(self, session_id: str) -> list[SessionEvent]:

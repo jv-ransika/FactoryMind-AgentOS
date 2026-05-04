@@ -40,6 +40,7 @@ def test_secret_provider_precedence(tmp_path, monkeypatch) -> None:
 def test_validate_required_profiles(tmp_path, monkeypatch) -> None:
     root = tmp_path / ".agent-os"
     root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     manager = SecretManager(root=root)
     assert manager.validate_required("dev")["ok"] is False
@@ -55,6 +56,8 @@ def test_redaction_hides_values() -> None:
 
 
 def test_runtime_fail_closed_then_reload(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     root = tmp_path / ".agent-os"
     agent_os = AgentOS.load(root=root, runtime_mode="openai")
     agent_os.create_agent(agent_id="a1", goal="g", model="gpt-4.1-mini", tenant_id="t1")

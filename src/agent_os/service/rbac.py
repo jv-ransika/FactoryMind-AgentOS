@@ -6,6 +6,9 @@ from agent_os.protocol import AuthContext, Role
 
 
 PERMISSIONS: dict[str, set[Role]] = {
+    "agent:write": {Role.ADMIN},
+    "agent:read": {Role.ADMIN, Role.USER},
+    "agent:status": {Role.ADMIN, Role.USER},
     "session:init": {Role.ADMIN, Role.USER},
     "session:run": {Role.ADMIN, Role.USER},
     "session:feedback": {Role.ADMIN, Role.USER},
@@ -22,6 +25,7 @@ PERMISSIONS: dict[str, set[Role]] = {
     "tools:audit": {Role.ADMIN, Role.USER},
     "ops:metrics": {Role.OPS, Role.ADMIN},
     "ops:readyz": {Role.OPS, Role.ADMIN},
+    "ops:capabilities": {Role.OPS, Role.ADMIN},
 }
 
 

@@ -17,7 +17,13 @@ class DualWriteStore:
         self.secondary.init()
 
     def __getattr__(self, name: str) -> Any:
-        if name.startswith("save_") or name.startswith("create_") or name.startswith("append_") or name.startswith("bind_"):
+        if (
+            name.startswith("save_")
+            or name.startswith("create_")
+            or name.startswith("append_")
+            or name.startswith("bind_")
+            or name.startswith("delete_")
+        ):
             p = getattr(self.primary, name)
             s = getattr(self.secondary, name)
 

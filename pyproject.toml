@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-os"
-version = "0.1.0-beta.3"
+version = "1.3.0"
 description = "A code-first FactoryMind AgentOS package for defining, running, and safely improving reusable agents."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +16,10 @@ dependencies = [
   "fastapi>=0.115,<1",
   "uvicorn>=0.30,<1",
   "httpx>=0.27,<1",
+  "openai-agents>=0.12,<1",
+  "hdbscan>=0.8.39,<1",
   "sqlalchemy>=2.0,<3",
+  "pgvector>=0.3.6,<1",
   "psycopg[binary]>=3.2,<4",
   "redis>=5.0,<6",
   "alembic>=1.13,<2",
@@ -25,6 +28,7 @@ dependencies = [
   "opentelemetry-api>=1.28,<2",
   "opentelemetry-sdk>=1.28,<2",
   "opentelemetry-exporter-otlp>=1.28,<2",
+  "tiktoken>=0.7,<1",
 ]
 
 [project.optional-dependencies]

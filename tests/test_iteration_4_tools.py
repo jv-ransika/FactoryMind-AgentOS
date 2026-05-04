@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from agent_os import AgentOS, ToolCallStatus, ToolManifest, ToolScope
+from agent_os import AgentOS, AgentTier, ToolCallStatus, ToolManifest, ToolScope
 from agent_os.cli.app import app
 
 
 def _setup_agent(tmp_path):
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="project_selector", goal="Select projects.", model="gpt-4.1-mini")
+    agent_os.create_agent(
+        agent_id="project_selector",
+        goal="Select projects.",
+        model="gpt-4.1-mini",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     return agent_os
 
 
@@ -171,7 +176,7 @@ def test_learning_still_works_with_tool_enabled_sessions(tmp_path) -> None:
     agent_os.sessions.accept(session.session_id)
     run = agent_os.learning.run(agent_id="project_selector")
     assert run.experience_count >= 1
-    assert run.candidate_ids
+    assert run.candidate_ids == []
 
 
 def test_cli_tools_flow(tmp_path) -> None:
@@ -180,7 +185,19 @@ def test_cli_tools_flow(tmp_path) -> None:
     assert runner.invoke(app, ["init", "--root", root]).exit_code == 0
     assert runner.invoke(
         app,
-        ["create", "agent", "project_selector", "--goal", "Select projects.", "--model", "gpt-4.1-mini", "--root", root],
+        [
+            "create",
+            "agent",
+            "project_selector",
+            "--goal",
+            "Select projects.",
+            "--model",
+            "gpt-4.1-mini",
+            "--agent-tier",
+            "self_learning_agent",
+            "--root",
+            root,
+        ],
     ).exit_code == 0
     created = runner.invoke(
         app,

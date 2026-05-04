@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from agent_os import AgentOS, ToolManifest, ToolScope
+from agent_os import AgentOS, AgentTier, ToolManifest, ToolScope
 
 
 def run_smoke(root: Path) -> dict:
@@ -11,7 +11,13 @@ def run_smoke(root: Path) -> dict:
         shutil.rmtree(root)
 
     app = AgentOS.load(root=root, runtime_mode="local")
-    agent = app.create_agent(agent_id="beta-agent", goal="Validate beta flow", model="gpt-4.1-mini", tenant_id="default")
+    agent = app.create_agent(
+        agent_id="beta-agent",
+        goal="Validate beta flow",
+        model="gpt-4.1-mini",
+        tenant_id="default",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
 
     session = app.sessions.init(agent_id=agent.id, input="Write a short proposal for Project X")
     first_output = app.sessions.run(session.session_id)
@@ -20,13 +26,13 @@ def run_smoke(root: Path) -> dict:
     app.sessions.accept(session.session_id, note="Accepted for pilot smoke")
 
     learn_run = app.learning.run(agent_id=agent.id, window_size=10)
-    candidate_ids = list(learn_run.candidate_ids)
-    if not candidate_ids:
-        raise RuntimeError("No learning candidates generated in smoke flow.")
-    report = app.learning.evaluate(candidate_ids[0])
-    if report.decision != "pass":
-        raise RuntimeError("Learning candidate did not pass gate in smoke flow.")
-    promoted = app.learning.promote(candidate_ids[0])
+    runs = app.flame.list_runs(agent.id)
+    if not runs:
+        raise RuntimeError("No FLAME reflection run generated in smoke flow.")
+    memories = app.memory.list(agent.id)
+    reflected = [m for m in memories if m.metadata.get("created_by") == "flame_reflection"]
+    if not reflected:
+        raise RuntimeError("No reflected long-term memory created in smoke flow.")
 
     manifest = app.tools.register(
         ToolManifest(
@@ -59,7 +65,7 @@ def run_smoke(root: Path) -> dict:
         "first_output_type": first_output.type.value,
         "second_output_type": second_output.type.value,
         "learning_run_id": learn_run.run_id,
-        "candidate_id": promoted.candidate_id,
+        "reflected_memory_id": reflected[0].memory_id,
         "tool_status": tool_result.status.value,
         "audit_id": tool_audit.audit_id,
     }

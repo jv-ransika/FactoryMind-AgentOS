@@ -1,5 +1,113 @@
 # Changelog
 
+## Unreleased
+
+## v1.3.0 (2026-05-04)
+
+### Stable Release Finalization
+- Full regression gate passed: `105 passed, 3 skipped`.
+- Beta smoke flow passed (`scripts/beta_smoke.py`) including sessions, feedback/accept, FLAME reflection, memory write, and tool audit.
+- Practical validation passed for:
+  - structured output mode (`output_mode=json_schema`) with typed `content_json`,
+  - pgvector retrieval path on vector-capable Postgres backend.
+
+### Agent Output Contract
+- Added dual output modes on `AgentDefinition`:
+  - `output_mode: "text" | "json_schema"` (default `text`)
+  - `output_schema: object | null` (required for `json_schema` mode)
+- Added `AgentOutput.content_json: object | null` for typed structured final outputs.
+- OpenAI runtime now supports schema-constrained structured outputs with validation and canonical JSON serialization in `content`.
+- Local runtime now supports deterministic placeholder structured outputs for `json_schema` mode.
+- CLI and service agent-creation surfaces now accept `output_mode` and `output_schema`.
+
+### FLAME and Vector Hardening
+- Added FLAME max character limits with truncate-and-continue policy:
+  - temporary extracted content cap: 320 chars,
+  - reflection content cap: 280 chars.
+- Added truncation observability metrics:
+  - `flame_temp_content_truncated`
+  - `flame_reflection_content_truncated`
+- Enforced pgvector-required behavior for non-local vector flows; unsupported vector backends fail explicitly.
+
+### Test and Reliability Fixes
+- Fixed release test collection/import stability for smoke script execution in test runtime contexts.
+- Added and updated tests for structured output mode, FLAME truncation behavior, and vector policy enforcement.
+
+### Usage/Cost Tracking Expansion
+- Added first-class usage/cost operation buckets: `embedding`, `flame_extraction`, and `flame_reflection`.
+- Added shared usage/cost recorder utility used by runtime, embedding, and FLAME paths.
+- Added OpenAI embedding usage capture (`prompt_tokens`/`total_tokens`) and usage/cost persistence during memory embed calls.
+- Added FLAME extraction/reflection OpenAI call usage/cost persistence with error-safe behavior.
+- Added `text-embedding-3-small` capability catalog entry for deterministic embedding cost computation when available.
+
+## v1.2.0 (2026-05-03)
+
+### FLAME Temporary Memory Cutover
+- Replaced candidate-era learning pipeline with FLAME temporary-memory reflection as the authoritative self-learning path.
+- Added FLAME subsystem with intake, extraction, pool persistence, trigger checks, clustering, reflection synthesis, and long-term memory handoff.
+- Accepted sessions without feedback now produce `experience` extracted items (not skipped).
+- Reflection outputs are written into long-term memory with provenance/confidence metadata (`created_by=flame_reflection`).
+
+### API and CLI Breaking Changes
+- Removed candidate-era SDK methods: `list_candidates`, `validate`, `evaluate`, `promote`, `reject`, `rollback`.
+- Removed service endpoints under `/learning/candidates/*`.
+- Removed CLI commands `learn list-candidates|validate|evaluate|promote|reject|rollback`.
+- Added FLAME surfaces:
+  - SDK: `AgentOS.flame.status|list_pool|list_runs|trigger`
+  - Service: `GET /flame/pool`, `GET /flame/runs`, `POST /flame/trigger`
+  - CLI: `agent-os flame pool|runs|trigger`
+- Kept `AgentOS.learning.run(...)` as one-release compatibility alias dispatching to FLAME trigger.
+
+### Reliability and Ops
+- Added FLAME pool/run persistence in local and Postgres adapters.
+- Added FLAME job types for worker orchestration (`flame_extract_session`, `flame_reflect_batch`, `flame_trigger_scan`).
+- Updated monitoring status logic to count FLAME-promoted memories from memory metadata.
+
+## v1.1.0 (2026-05-03)
+
+### Runtime Cutover
+- Added OpenAI Agents SDK runtime engine path (`runtime_engine=openai_agents_sdk`) in `OpenAIRuntimeAdapter`.
+- Added runtime metadata in typed outputs (`runtime_metadata`) with engine/session/run hints.
+- Service `POST /sessions/{id}/run` now returns additive fields: `runtime_engine`, `sdk_run_id`.
+
+### Compatibility and Safety
+- Preserved typed output contract: `question | final | error` plus confidence.
+- Preserved existing AgentOS governance boundaries (learning gates, rollback, RBAC/tenant, idempotency, retries).
+- Added deterministic local fallback to legacy OpenAI Responses runtime when Agents SDK package is unavailable.
+
+### Configuration
+- Added `AGENT_OS_RUNTIME_ENGINE` support in runtime config loading.
+- Added `openai-agents` dependency to package metadata for SDK-backed runtime.
+
+## v1.0.0 (2026-05-02)
+
+### Stable External Release
+- Memory-only self-learning core for stable runtime behavior.
+- OpenAI Responses API integration with strict typed outputs and deterministic error taxonomy.
+- Model capability registry with fail-closed unknown-model handling.
+- Context-window preflight controls with deterministic compaction/truncation notes.
+- Usage and cost tracking with operation-bucket accounting.
+- Agent status and usage/cost monitoring endpoints.
+
+### Breaking Changes
+- Skill-based learning and skill-based runtime context usage removed from stable core behavior.
+- Stable API surface now emphasizes `memory`, `learning`, `tools`, `capabilities`, and `monitor`.
+
+### Reliability and Security
+- Self-learning agent acceptance triggers automatic reflection job enqueue.
+- Reflection enqueue is feedback-gated: accepted sessions without feedback are skipped.
+- Learning remains gate-based with low-risk auto-promotion only.
+- Existing JWT/RBAC/tenant isolation and job retry/dead-letter behavior retained.
+
+### Verification Notes
+- Manual local-runtime smoke run completed in isolated install environment.
+- Verified business logic paths:
+  - accept without feedback => no reflection enqueue
+  - accept with feedback => reflection enqueue and worker processing
+  - memory-only candidate generation/promotion
+  - tool denial and audit typed behavior
+  - openai missing-key typed runtime error behavior
+
 ## v0.1.0-beta.3 (2026-05-02)
 
 ### Fast-Track Stabilization Scope

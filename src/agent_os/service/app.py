@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from agent_os import AgentOS, AuthConfig, AuthContext, PromotionPolicy, PromotionState, Role, ToolManifest
+from agent_os import AgentOS, AgentTier, AuthConfig, AuthContext, FlamePoolState, PromotionPolicy, Role, ToolManifest
 from agent_os.observability import init_otel
 from agent_os.ops.deps import check_dependencies, environment_mode
 from agent_os.secrets import redact
@@ -24,7 +25,7 @@ def _op(status: str, payload: dict, reused: bool = False, operation_id: str | No
 
 
 def create_service_app(agent_os: AgentOS, auth_config: AuthConfig | None = None) -> FastAPI:
-    app = FastAPI(title="FactoryMind AgentOS Service", version="0.1.0-beta.3")
+    app = FastAPI(title="FactoryMind AgentOS Service", version="1.3.0")
     app.state.agent_os = agent_os
     app.state.worker_healthy = True
     app.state.env_mode = environment_mode()
@@ -59,6 +60,47 @@ def create_service_app(agent_os: AgentOS, auth_config: AuthConfig | None = None)
     @app.get("/healthz")
     def healthz():
         return {"status": "ok"}
+
+    @app.post("/agents")
+    def agents_create(body: dict, ctx: AuthContext = Depends(auth_any)):
+        require_permission(ctx, "agent:write")
+        tier_raw = str(body.get("agent_tier", AgentTier.BASIC_AGENT.value))
+        agent_tier = AgentTier(tier_raw)
+        agent = agent_os.create_agent(
+            agent_id=str(body["agent_id"]),
+            goal=str(body["goal"]),
+            model=str(body["model"]),
+            tenant_id=ctx.tenant_id,
+            agent_tier=agent_tier,
+            output_mode=str(body.get("output_mode", "text")),
+            output_schema=body.get("output_schema"),
+        )
+        return agent.model_dump(mode="json")
+
+    @app.get("/agents/{agent_id}/status")
+    def agents_status(agent_id: str, ctx: AuthContext = Depends(auth_any)):
+        require_permission(ctx, "agent:status")
+        _agent_in_tenant(agent_id, ctx)
+        status = agent_os.monitor.status(agent_id)
+        return status.model_dump(mode="json")
+
+    @app.get("/agents/{agent_id}/usage")
+    def agents_usage(agent_id: str, start: str | None = None, end: str | None = None, ctx: AuthContext = Depends(auth_any)):
+        require_permission(ctx, "agent:status")
+        _agent_in_tenant(agent_id, ctx)
+        start_dt = datetime.fromisoformat(start) if start else None
+        end_dt = datetime.fromisoformat(end) if end else None
+        rows = agent_os.monitor.usage(agent_id, start=start_dt, end=end_dt)
+        return {"usage": [row.model_dump(mode="json") for row in rows]}
+
+    @app.get("/agents/{agent_id}/costs")
+    def agents_costs(agent_id: str, start: str | None = None, end: str | None = None, ctx: AuthContext = Depends(auth_any)):
+        require_permission(ctx, "agent:status")
+        _agent_in_tenant(agent_id, ctx)
+        start_dt = datetime.fromisoformat(start) if start else None
+        end_dt = datetime.fromisoformat(end) if end else None
+        rows = agent_os.monitor.costs(agent_id, start=start_dt, end=end_dt)
+        return {"costs": [row.model_dump(mode="json") for row in rows]}
 
     @app.get("/readyz")
     def readyz(ctx: AuthContext = Depends(auth_ops)):
@@ -106,7 +148,11 @@ def create_service_app(agent_os: AgentOS, auth_config: AuthConfig | None = None)
             return _op(reused.get("status", "ok"), reused.get("data", {}), reused=True, operation_id=reused.get("operation_id"))
         _session_in_tenant(session_id, ctx)
         output = agent_os.sessions.run(session_id)
-        response = _op("ok", output.model_dump(mode="json"))
+        payload = output.model_dump(mode="json")
+        runtime_metadata = payload.get("runtime_metadata") or {}
+        payload["runtime_engine"] = runtime_metadata.get("runtime_engine", "unknown")
+        payload["sdk_run_id"] = runtime_metadata.get("sdk_run_id")
+        response = _op("ok", payload)
         _record(x_idempotency_key, response)
         agent_os.metrics.inc("api_sessions_run")
         return response
@@ -162,57 +208,35 @@ def create_service_app(agent_os: AgentOS, auth_config: AuthConfig | None = None)
         )
         return _op(result["status"], result, operation_id=result["operation_id"])
 
-    @app.post("/learning/candidates/{candidate_id}/evaluate")
-    def learning_evaluate(candidate_id: str, x_idempotency_key: str | None = Header(default=None), ctx: AuthContext = Depends(auth_any)):
-        require_permission(ctx, "learning:evaluate")
-        reused = _idempotent(x_idempotency_key)
-        if reused is not None:
-            return _op(reused.get("status", "ok"), reused.get("data", {}), reused=True, operation_id=reused.get("operation_id"))
-        candidate = agent_os.store.load_learning_candidate(candidate_id)
-        if candidate.tenant_id != ctx.tenant_id:
-            raise HTTPException(status_code=403, detail="cross_tenant_candidate_denied")
-        report = agent_os.learning.evaluate(candidate_id)
-        response = _op("ok", report.model_dump(mode="json"))
-        _record(x_idempotency_key, response)
-        agent_os.metrics.inc("api_learning_evaluate")
-        return response
-
-    @app.post("/learning/candidates/{candidate_id}/promote")
-    def learning_promote(candidate_id: str, x_idempotency_key: str | None = Header(default=None), ctx: AuthContext = Depends(auth_any)):
-        require_permission(ctx, "learning:promote")
-        reused = _idempotent(x_idempotency_key)
-        if reused is not None:
-            return _op(reused.get("status", "ok"), reused.get("data", {}), reused=True, operation_id=reused.get("operation_id"))
-        candidate = agent_os.store.load_learning_candidate(candidate_id)
-        if candidate.tenant_id != ctx.tenant_id:
-            raise HTTPException(status_code=403, detail="cross_tenant_candidate_denied")
-        candidate = agent_os.learning.promote(candidate_id)
-        response = _op("ok", candidate.model_dump(mode="json"))
-        _record(x_idempotency_key, response)
-        agent_os.metrics.inc("api_learning_promote")
-        return response
-
-    @app.post("/learning/candidates/{candidate_id}/rollback")
-    def learning_rollback(candidate_id: str, body: dict, x_idempotency_key: str | None = Header(default=None), ctx: AuthContext = Depends(auth_any)):
-        require_permission(ctx, "learning:rollback")
-        reused = _idempotent(x_idempotency_key)
-        if reused is not None:
-            return _op(reused.get("status", "ok"), reused.get("data", {}), reused=True, operation_id=reused.get("operation_id"))
-        candidate = agent_os.store.load_learning_candidate(candidate_id)
-        if candidate.tenant_id != ctx.tenant_id:
-            raise HTTPException(status_code=403, detail="cross_tenant_candidate_denied")
-        record = agent_os.learning.rollback(candidate_id=candidate_id, reason=str(body["reason"]))
-        response = _op("ok", record.model_dump(mode="json"))
-        _record(x_idempotency_key, response)
-        agent_os.metrics.inc("api_learning_rollback")
-        return response
-
-    @app.get("/learning/candidates")
-    def learning_candidates(agent_id: str, state: PromotionState | None = None, ctx: AuthContext = Depends(auth_any)):
+    @app.get("/flame/pool")
+    def flame_pool(agent_id: str, state: FlamePoolState | None = None, ctx: AuthContext = Depends(auth_any)):
         require_permission(ctx, "learning:evaluate")
         _agent_in_tenant(agent_id, ctx)
-        candidates = [c for c in agent_os.learning.list_candidates(agent_id=agent_id, state=state) if c.tenant_id == ctx.tenant_id]
-        return {"candidates": [candidate.model_dump(mode="json") for candidate in candidates]}
+        rows = [row for row in agent_os.flame.list_pool(agent_id=agent_id, state=state) if row.tenant_id == ctx.tenant_id]
+        return {"pool_items": [row.model_dump(mode="json") for row in rows]}
+
+    @app.get("/flame/runs")
+    def flame_runs(agent_id: str, ctx: AuthContext = Depends(auth_any)):
+        require_permission(ctx, "learning:evaluate")
+        _agent_in_tenant(agent_id, ctx)
+        rows = [row for row in agent_os.flame.list_runs(agent_id=agent_id) if row.tenant_id == ctx.tenant_id]
+        return {"runs": [row.model_dump(mode="json") for row in rows]}
+
+    @app.post("/flame/trigger")
+    def flame_trigger(body: dict, x_idempotency_key: str | None = Header(default=None), ctx: AuthContext = Depends(auth_any)):
+        require_permission(ctx, "learning:run")
+        reused = _idempotent(x_idempotency_key)
+        if reused is not None:
+            return _op(reused.get("status", "ok"), reused.get("data", {}), reused=True, operation_id=reused.get("operation_id"))
+        agent_id = body.get("agent_id")
+        if agent_id:
+            _agent_in_tenant(str(agent_id), ctx)
+        runs = agent_os.flame.trigger(agent_id=agent_id, force=bool(body.get("force", False)))
+        payload = {"runs": [run.model_dump(mode="json") for run in runs]}
+        response = _op("ok", payload)
+        _record(x_idempotency_key, response)
+        agent_os.metrics.inc("api_flame_trigger")
+        return response
 
     @app.get("/learning/policy/{agent_id}")
     def learning_policy_get(agent_id: str, ctx: AuthContext = Depends(auth_any)):
@@ -300,6 +324,12 @@ def create_service_app(agent_os: AgentOS, auth_config: AuthConfig | None = None)
         require_permission(ctx, "ops:metrics")
         status = agent_os.secrets.reload()
         return redact(status)
+
+    @app.post("/ops/capabilities/refresh")
+    def ops_capabilities_refresh(ctx: AuthContext = Depends(auth_ops)):
+        require_permission(ctx, "ops:capabilities")
+        result = agent_os.capabilities.refresh()
+        return {"refreshed_at": result.refreshed_at, "model_count": result.model_count}
 
     class RequestContextMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):  # type: ignore[override]

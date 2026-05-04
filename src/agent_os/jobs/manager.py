@@ -134,6 +134,24 @@ class JobManager:
                 window_size=int(payload.get("window_size", 50)),
             )
             return run.model_dump(mode="json")
+        if type == "flame_extract_session":
+            result = self.agent_os.flame.ingest_accepted_session(
+                agent_id=payload["agent_id"],
+                session_id=payload["session_id"],
+            )
+            return result
+        if type == "flame_reflect_batch":
+            runs = self.agent_os.flame.trigger(
+                agent_id=payload.get("agent_id"),
+                force=bool(payload.get("force", False)),
+            )
+            return {"runs": [run.model_dump(mode="json") for run in runs]}
+        if type == "flame_trigger_scan":
+            runs = self.agent_os.flame.trigger(
+                agent_id=payload.get("agent_id"),
+                force=False,
+            )
+            return {"runs": [run.model_dump(mode="json") for run in runs]}
         if type == "candidate_evaluate":
             report = self.agent_os.learning.evaluate(candidate_id=payload["candidate_id"])
             return report.model_dump(mode="json")

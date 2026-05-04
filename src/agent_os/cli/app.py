@@ -8,6 +8,8 @@ import uvicorn
 
 from agent_os import (
     AgentOS,
+    AgentTier,
+    FlamePoolState,
     McpServerConfig,
     MemoryScope,
     MemoryType,
@@ -31,12 +33,14 @@ create_app = typer.Typer(help="Create FactoryMind AgentOS resources.")
 list_app = typer.Typer(help="List FactoryMind AgentOS resources.")
 bind_app = typer.Typer(help="Bind resources to agents.")
 learn_app = typer.Typer(help="Learning pipeline commands.")
+flame_app = typer.Typer(help="FLAME temporary-memory commands.")
 tool_app = typer.Typer(help="Tool gateway commands.")
 mcp_app = typer.Typer(help="MCP server registry commands.")
 app.add_typer(create_app, name="create")
 app.add_typer(list_app, name="list")
 app.add_typer(bind_app, name="bind")
 app.add_typer(learn_app, name="learn")
+app.add_typer(flame_app, name="flame")
 app.add_typer(tool_app, name="tool")
 app.add_typer(mcp_app, name="mcp")
 worker_app = typer.Typer(help="Background worker commands.")
@@ -70,11 +74,23 @@ def create_agent(
     goal: str = typer.Option("A reusable FactoryMind AgentOS agent.", "--goal", "-g"),
     model: str = typer.Option(..., "--model"),
     tenant_id: str = typer.Option("default", "--tenant-id"),
+    agent_tier: AgentTier = typer.Option(AgentTier.BASIC_AGENT, "--agent-tier"),
+    output_mode: str = typer.Option("text", "--output-mode"),
+    output_schema: str | None = typer.Option(None, "--output-schema"),
     root: str = ".agent-os",
 ) -> None:
     """Create an agent definition."""
     agent_os = AgentOS.load(root=root)
-    agent = agent_os.create_agent(agent_id=name, goal=goal, model=model, tenant_id=tenant_id)
+    schema_obj = _json_object(output_schema) if output_schema else None
+    agent = agent_os.create_agent(
+        agent_id=name,
+        goal=goal,
+        model=model,
+        tenant_id=tenant_id,
+        agent_tier=agent_tier,
+        output_mode=output_mode,
+        output_schema=schema_obj,
+    )
     typer.echo(json.dumps(agent.model_dump(mode="json"), indent=2))
 
 
@@ -313,54 +329,6 @@ def learn_list_runs(agent: str, root: str = ".agent-os") -> None:
     typer.echo(json.dumps([run.model_dump(mode="json") for run in runs], indent=2))
 
 
-@learn_app.command("list-candidates")
-def learn_list_candidates(
-    agent: str,
-    state: PromotionState | None = typer.Option(None, "--state"),
-    root: str = ".agent-os",
-) -> None:
-    """List learning candidates for an agent."""
-    agent_os = AgentOS.load(root=root)
-    candidates = agent_os.learning.list_candidates(agent_id=agent, state=state)
-    typer.echo(json.dumps([candidate.model_dump(mode="json") for candidate in candidates], indent=2))
-
-
-@learn_app.command("validate")
-def learn_validate(candidate_id: str, root: str = ".agent-os") -> None:
-    """Validate a candidate and produce an auditable report."""
-    agent_os = AgentOS.load(root=root)
-    report = agent_os.learning.validate(candidate_id=candidate_id)
-    typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
-
-
-@learn_app.command("evaluate")
-def learn_evaluate(candidate_id: str, root: str = ".agent-os") -> None:
-    """Run full gate + replay evaluation for a candidate."""
-    agent_os = AgentOS.load(root=root)
-    report = agent_os.learning.evaluate(candidate_id=candidate_id)
-    typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
-
-
-@learn_app.command("promote")
-def learn_promote(candidate_id: str, root: str = ".agent-os") -> None:
-    """Manually promote an approved candidate."""
-    agent_os = AgentOS.load(root=root)
-    candidate = agent_os.learning.promote(candidate_id=candidate_id)
-    typer.echo(json.dumps(candidate.model_dump(mode="json"), indent=2))
-
-
-@learn_app.command("reject")
-def learn_reject(
-    candidate_id: str,
-    reason: str = typer.Option(..., "--reason"),
-    root: str = ".agent-os",
-) -> None:
-    """Reject a candidate with a required reason."""
-    agent_os = AgentOS.load(root=root)
-    candidate = agent_os.learning.reject(candidate_id=candidate_id, reason=reason)
-    typer.echo(json.dumps(candidate.model_dump(mode="json"), indent=2))
-
-
 policy_app = typer.Typer(help="Learning promotion policy commands.")
 learn_app.add_typer(policy_app, name="policy")
 
@@ -397,16 +365,36 @@ def learn_policy_set(
     typer.echo(json.dumps(updated.model_dump(mode="json"), indent=2))
 
 
-@learn_app.command("rollback")
-def learn_rollback(
-    candidate_id: str,
-    reason: str = typer.Option(..., "--reason"),
+@flame_app.command("pool")
+def flame_pool(
+    agent: str,
+    state: FlamePoolState | None = typer.Option(None, "--state"),
     root: str = ".agent-os",
 ) -> None:
-    """Rollback a promoted candidate's applied artifact changes."""
+    """List FLAME temporary pool items for an agent."""
     agent_os = AgentOS.load(root=root)
-    record = agent_os.learning.rollback(candidate_id=candidate_id, reason=reason)
-    typer.echo(json.dumps(record.model_dump(mode="json"), indent=2))
+    rows = agent_os.flame.list_pool(agent_id=agent, state=state)
+    typer.echo(json.dumps([row.model_dump(mode="json") for row in rows], indent=2))
+
+
+@flame_app.command("runs")
+def flame_runs(agent: str, root: str = ".agent-os") -> None:
+    """List FLAME reflection batch runs for an agent."""
+    agent_os = AgentOS.load(root=root)
+    runs = agent_os.flame.list_runs(agent_id=agent)
+    typer.echo(json.dumps([run.model_dump(mode="json") for run in runs], indent=2))
+
+
+@flame_app.command("trigger")
+def flame_trigger(
+    agent: str | None = typer.Option(None, "--agent"),
+    force: bool = typer.Option(False, "--force"),
+    root: str = ".agent-os",
+) -> None:
+    """Trigger FLAME reflection pass for one agent or all self-learning agents."""
+    agent_os = AgentOS.load(root=root)
+    runs = agent_os.flame.trigger(agent_id=agent, force=force)
+    typer.echo(json.dumps([run.model_dump(mode="json") for run in runs], indent=2))
 
 
 @tool_app.command("call")

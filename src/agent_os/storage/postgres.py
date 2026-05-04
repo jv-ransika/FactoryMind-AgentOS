@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from sqlalchemy import JSON, Column, MetaData, String, Table, Text, create_engine, delete, select
+from sqlalchemy import JSON, Column, MetaData, String, Table, Text, create_engine, delete, select, text
+
+try:  # pragma: no cover - import path varies by environment
+    from pgvector.sqlalchemy import Vector
+except Exception:  # pragma: no cover - optional dependency path
+    Vector = None  # type: ignore[assignment]
 
 from agent_os.protocol import (
     AgentDefinition,
     GateDecisionReport,
     LearningCandidate,
     LearningRun,
+    PoolItem,
+    ReflectionBatchRun,
+    FlamePoolState,
     MemoryItem,
     PromotionMode,
     PromotionPolicy,
@@ -54,9 +63,31 @@ class PostgresDomainStore:
             Column("payload", Text, nullable=False),
             Column("created_at", String(64), nullable=False),
         )
+        vector_column_type = Vector(1536) if Vector is not None else JSON
+        self.memory_vectors = Table(
+            "agent_os_memory_vectors",
+            self.md,
+            Column("memory_id", String(255), primary_key=True),
+            Column("tenant_id", String(255), nullable=True),
+            Column("agent_id", String(255), nullable=False),
+            Column("embedding", vector_column_type, nullable=False),
+            Column("updated_at", String(64), nullable=False),
+        )
 
     def init(self) -> None:
+        self._require_pgvector_python()
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        except Exception as exc:
+            raise RuntimeError(
+                f"pgvector_extension_missing: vector_backend_required: {exc.__class__.__name__}: {exc}"
+            ) from exc
         self.md.create_all(self.engine)
+
+    def _require_pgvector_python(self) -> None:
+        if Vector is None:
+            raise RuntimeError("vector_backend_required: pgvector_python_package_missing")
 
     def _upsert(self, kind: str, key: str, payload: dict, agent_id: str | None = None, session_id: str | None = None, candidate_id: str | None = None) -> None:
         self.init()
@@ -107,6 +138,41 @@ class PostgresDomainStore:
 
     def save_memory(self, memory: MemoryItem) -> None:
         self._upsert("memory", memory.memory_id, memory.model_dump(mode="json"), agent_id=memory.agent_id)
+
+    def save_memory_vector(self, agent_id: str, memory_id: str, embedding: list[float]) -> None:
+        self._require_pgvector_python()
+        self.init()
+        tenant_id = self.load_agent(agent_id).tenant_id
+        with self.engine.begin() as conn:
+            conn.execute(delete(self.memory_vectors).where(self.memory_vectors.c.memory_id == memory_id))
+            conn.execute(
+                self.memory_vectors.insert().values(
+                    memory_id=memory_id,
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    embedding=[float(value) for value in embedding],
+                    updated_at=datetime.now(timezone.utc).isoformat(),
+                )
+            )
+
+    def query_memory_vectors(self, agent_id: str, query_embedding: list[float], limit: int = 5) -> list[tuple[str, float]]:
+        self._require_pgvector_python()
+        self.init()
+        if not query_embedding:
+            return []
+        with self.engine.begin() as conn:
+            distance = self.memory_vectors.c.embedding.cosine_distance([float(value) for value in query_embedding])
+            stmt = (
+                select(self.memory_vectors.c.memory_id, distance.label("distance"))
+                .where(self.memory_vectors.c.agent_id == agent_id)
+                .order_by(distance.asc())
+                .limit(limit)
+            )
+            rows = conn.execute(stmt).all()
+            return [
+                (str(row[0]), max(0.0, 1.0 - float(row[1] or 0.0)))
+                for row in rows
+            ]
 
     def load_memory(self, agent_id: str, memory_id: str) -> MemoryItem:
         mem = MemoryItem.model_validate(self._get("memory", memory_id))
@@ -258,3 +324,30 @@ class PostgresDomainStore:
 
     def list_rollback_records(self, candidate_id: str | None = None) -> list[RollbackRecord]:
         return [RollbackRecord.model_validate(item) for item in self._list("rollback_record", candidate_id=candidate_id)]
+
+    def save_flame_pool_item(self, item: PoolItem) -> None:
+        self._upsert("flame_pool_item", item.pool_item_id, item.model_dump(mode="json"), agent_id=item.agent_id)
+
+    def list_flame_pool_items(self, agent_id: str | None = None, state: FlamePoolState | None = None) -> list[PoolItem]:
+        rows = [PoolItem.model_validate(item) for item in self._list("flame_pool_item", agent_id=agent_id)]
+        if state is not None:
+            rows = [row for row in rows if row.state == state]
+        return rows
+
+    def delete_flame_pool_items(self, pool_item_ids: list[str]) -> None:
+        self.init()
+        if not pool_item_ids:
+            return
+        with self.engine.begin() as conn:
+            conn.execute(
+                delete(self.records).where(
+                    self.records.c.kind == "flame_pool_item",
+                    self.records.c.key.in_(pool_item_ids),
+                )
+            )
+
+    def save_flame_run(self, run: ReflectionBatchRun) -> None:
+        self._upsert("flame_run", run.run_id, run.model_dump(mode="json"), agent_id=run.agent_id)
+
+    def list_flame_runs(self, agent_id: str | None = None) -> list[ReflectionBatchRun]:
+        return [ReflectionBatchRun.model_validate(item) for item in self._list("flame_run", agent_id=agent_id)]

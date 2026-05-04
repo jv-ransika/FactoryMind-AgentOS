@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
-from agent_os import AgentOS
+from agent_os import AgentOS, AgentTier
 from agent_os.service import create_service_app
 
 
@@ -28,7 +28,7 @@ def _token_headers(tmp_path, tenant_id: str, roles: list[str]) -> dict[str, str]
 
 def test_missing_auth_denied(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="a1", goal="g1", model="gpt-4.1-mini", tenant_id="t1")
+    agent_os.create_agent(agent_id="a1", goal="g1", model="gpt-4.1-mini", tenant_id="t1", agent_tier=AgentTier.SELF_LEARNING_AGENT)
     client = TestClient(create_service_app(agent_os))
     resp = client.post("/sessions/init", json={"agent_id": "a1", "input": "hi"})
     assert resp.status_code == 401
@@ -43,17 +43,12 @@ def test_cross_tenant_denied(tmp_path) -> None:
     assert resp.status_code == 403
 
 
-def test_role_denied_for_promote(tmp_path) -> None:
+def test_role_denied_for_policy_set(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="a1", goal="g1", model="gpt-4.1-mini", tenant_id="t1")
-    session = agent_os.sessions.init("a1", "hello")
-    agent_os.sessions.run(session.session_id)
-    agent_os.sessions.accept(session.session_id)
-    run = agent_os.learning.run("a1")
-    candidate_id = run.candidate_ids[0]
+    agent_os.create_agent(agent_id="a1", goal="g1", model="gpt-4.1-mini", tenant_id="t1", agent_tier=AgentTier.SELF_LEARNING_AGENT)
     headers = _token_headers(tmp_path, tenant_id="t1", roles=["user"])
     client = TestClient(create_service_app(agent_os))
-    resp = client.post(f"/learning/candidates/{candidate_id}/promote", headers=headers)
+    resp = client.post("/learning/policy/a1", json={"mode": "suggest_only"}, headers=headers)
     assert resp.status_code == 403
 
 

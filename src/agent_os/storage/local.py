@@ -9,6 +9,9 @@ from agent_os.protocol import (
     GateDecisionReport,
     LearningCandidate,
     LearningRun,
+    PoolItem,
+    ReflectionBatchRun,
+    FlamePoolState,
     MemoryItem,
     PromotionMode,
     PromotionPolicy,
@@ -39,6 +42,9 @@ class LocalStore:
         self.learning_reports_dir = self.learning_dir / "reports"
         self.learning_gate_reports_dir = self.learning_dir / "gate_reports"
         self.learning_rollbacks_dir = self.learning_dir / "rollbacks"
+        self.flame_dir = self.root / "flame"
+        self.flame_pool_dir = self.flame_dir / "pool"
+        self.flame_runs_dir = self.flame_dir / "runs"
         self.tools_dir = self.root / "tools"
         self.tools_manifests_dir = self.tools_dir / "manifests"
         self.tools_allowlists_dir = self.tools_dir / "agent_allowlists"
@@ -57,12 +63,14 @@ class LocalStore:
         self.learning_reports_dir.mkdir(parents=True, exist_ok=True)
         self.learning_gate_reports_dir.mkdir(parents=True, exist_ok=True)
         self.learning_rollbacks_dir.mkdir(parents=True, exist_ok=True)
+        self.flame_pool_dir.mkdir(parents=True, exist_ok=True)
+        self.flame_runs_dir.mkdir(parents=True, exist_ok=True)
         self.tools_manifests_dir.mkdir(parents=True, exist_ok=True)
         self.tools_allowlists_dir.mkdir(parents=True, exist_ok=True)
         self.tools_audit_dir.mkdir(parents=True, exist_ok=True)
         self.policy_dir.mkdir(parents=True, exist_ok=True)
         if not self.config_path.exists():
-            self._write_json(self.config_path, {"version": "0.1.0"})
+            self._write_json(self.config_path, {"version": "1.2.0"})
 
     def save_agent(self, agent: AgentDefinition) -> None:
         self.init()
@@ -84,6 +92,20 @@ class LocalStore:
     def save_memory(self, memory: MemoryItem) -> None:
         self.init()
         self._write_json(self.memory_path(memory.agent_id, memory.memory_id), memory.model_dump(mode="json"))
+
+    def save_memory_vector(self, agent_id: str, memory_id: str, embedding: list[float]) -> None:
+        _ = agent_id
+        _ = memory_id
+        _ = embedding
+        # Local mode does not provide vector retrieval in this iteration.
+        return None
+
+    def query_memory_vectors(self, agent_id: str, query_embedding: list[float], limit: int = 5) -> list[tuple[str, float]]:
+        _ = agent_id
+        _ = query_embedding
+        _ = limit
+        # Local mode does not provide vector retrieval in this iteration.
+        return []
 
     def load_memory(self, agent_id: str, memory_id: str) -> MemoryItem:
         path = self.memory_path(agent_id, memory_id)
@@ -344,6 +366,43 @@ class LocalStore:
             return records
         return [record for record in records if record.candidate_id == candidate_id]
 
+    def save_flame_pool_item(self, item: PoolItem) -> None:
+        self.init()
+        self._write_json(self.flame_pool_path(item.pool_item_id), item.model_dump(mode="json"))
+
+    def list_flame_pool_items(self, agent_id: str | None = None, state: FlamePoolState | None = None) -> list[PoolItem]:
+        self.init()
+        rows = [
+            PoolItem.model_validate(self._read_json(path))
+            for path in sorted(self.flame_pool_dir.glob("*.json"))
+        ]
+        if agent_id is not None:
+            rows = [row for row in rows if row.agent_id == agent_id]
+        if state is not None:
+            rows = [row for row in rows if row.state == state]
+        return rows
+
+    def delete_flame_pool_items(self, pool_item_ids: list[str]) -> None:
+        self.init()
+        for pool_item_id in pool_item_ids:
+            path = self.flame_pool_path(pool_item_id)
+            if path.exists():
+                path.unlink()
+
+    def save_flame_run(self, run: ReflectionBatchRun) -> None:
+        self.init()
+        self._write_json(self.flame_run_path(run.run_id), run.model_dump(mode="json"))
+
+    def list_flame_runs(self, agent_id: str | None = None) -> list[ReflectionBatchRun]:
+        self.init()
+        runs = [
+            ReflectionBatchRun.model_validate(self._read_json(path))
+            for path in sorted(self.flame_runs_dir.glob("*.json"))
+        ]
+        if agent_id is not None:
+            runs = [run for run in runs if run.agent_id == agent_id]
+        return runs
+
     def agent_path(self, agent_id: str) -> Path:
         return self.agents_dir / f"{agent_id}.json"
 
@@ -385,6 +444,12 @@ class LocalStore:
 
     def tool_audit_path(self, audit_id: str) -> Path:
         return self.tools_audit_dir / f"{audit_id}.json"
+
+    def flame_pool_path(self, pool_item_id: str) -> Path:
+        return self.flame_pool_dir / f"{pool_item_id}.json"
+
+    def flame_run_path(self, run_id: str) -> Path:
+        return self.flame_runs_dir / f"{run_id}.json"
 
     @staticmethod
     def _read_json(path: Path) -> dict:

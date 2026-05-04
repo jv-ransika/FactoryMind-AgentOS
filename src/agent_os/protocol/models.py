@@ -6,6 +6,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+from pydantic import model_validator
 
 
 def utc_now() -> datetime:
@@ -22,6 +23,11 @@ class LearningMode(StrEnum):
     SUGGEST = "suggest"
     AUTO_LOW_RISK = "auto_low_risk"
     MANUAL_HIGH_RISK = "manual_high_risk"
+
+
+class AgentTier(StrEnum):
+    BASIC_AGENT = "basic_agent"
+    SELF_LEARNING_AGENT = "self_learning_agent"
 
 
 class OutputType(StrEnum):
@@ -79,7 +85,15 @@ class Confidence(BaseModel):
 class AgentOutput(BaseModel):
     type: OutputType
     content: str
+    content_json: dict[str, Any] | None = None
     confidence: Confidence = Field(default_factory=Confidence)
+    runtime_metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_content_json(self) -> "AgentOutput":
+        if self.content_json is not None and self.type != OutputType.FINAL:
+            raise ValueError("content_json is only allowed for final outputs.")
+        return self
 
 
 class AgentDefinition(BaseModel):
@@ -87,10 +101,19 @@ class AgentDefinition(BaseModel):
     goal: str
     model: str
     tenant_id: str = "default"
-    version: str = "0.1.0-beta.3"
+    version: str = "1.3.0"
+    agent_tier: AgentTier = AgentTier.BASIC_AGENT
     learning_mode: LearningMode = LearningMode.COLLECT_ONLY
     tools: list[str] = Field(default_factory=list)
-    skills: list[str] = Field(default_factory=list)
+    output_mode: Literal["text", "json_schema"] = "text"
+    output_schema: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _validate_output_mode(self) -> "AgentDefinition":
+        if self.output_mode == "json_schema":
+            if not isinstance(self.output_schema, dict) or not self.output_schema:
+                raise ValueError("output_schema is required when output_mode=json_schema.")
+        return self
 
 
 class Session(BaseModel):
@@ -100,7 +123,7 @@ class Session(BaseModel):
     status: SessionStatus = SessionStatus.OPEN
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
-    agent_version: str = "0.1.0-beta.3"
+    agent_version: str = "1.3.0"
 
 
 class SessionEvent(BaseModel):
@@ -111,7 +134,7 @@ class SessionEvent(BaseModel):
     type: EventType
     created_at: datetime = Field(default_factory=utc_now)
     payload: dict[str, Any] = Field(default_factory=dict)
-    agent_version: str = "0.1.0-beta.3"
+    agent_version: str = "1.3.0"
 
 
 class InputMessage(BaseModel):
@@ -138,6 +161,7 @@ class MemoryItem(BaseModel):
     status: ResourceStatus = ResourceStatus.ACTIVE
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -161,6 +185,7 @@ class RetrievalResult(BaseModel):
     query: str
     matched_terms: list[str] = Field(default_factory=list)
     score: float = Field(default=0.0, ge=0.0)
+    score_source: str = "keyword_overlap"
 
 
 class RetrievedMemory(BaseModel):
@@ -178,20 +203,37 @@ class ContextPacket(BaseModel):
     active_input: str
     latest_feedback: str | None = None
     selected_memories: list[RetrievedMemory] = Field(default_factory=list)
-    selected_skills: list[RetrievedSkill] = Field(default_factory=list)
     tool_evidence: list[dict[str, Any]] = Field(default_factory=list)
     token_budget: int | None = None
     estimated_tokens: int | None = None
     truncated: bool = False
+    truncation_notes: list[str] = Field(default_factory=list)
 
 
 class RuntimeConfig(BaseModel):
     mode: Literal["local", "openai"] = "local"
+    runtime_engine: Literal["legacy_openai", "openai_agents_sdk"] = "openai_agents_sdk"
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     openai_timeout_ms: int = Field(default=20000, ge=1)
     openai_max_retries: int = Field(default=1, ge=0)
     default_token_budget: int = Field(default=2500, ge=100)
+    reserve_output_tokens: int = Field(default=2048, ge=1)
+    context_safety_margin_tokens: int = Field(default=512, ge=0)
+    flame_pool_size_trigger: int = Field(default=12, ge=1)
+    flame_time_trigger_hours: int = Field(default=24, ge=1)
+    flame_extraction_model: str = "gpt-4.1-mini"
+    flame_reflection_model: str = "gpt-4.1-mini"
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    memory_vector_top_k: int = Field(default=5, ge=1)
+
+
+class RuntimeMetadata(BaseModel):
+    runtime_engine: Literal["openai_agents_sdk", "legacy_openai"]
+    sdk_run_id: str | None = None
+    sdk_session_backend: str | None = None
+    compaction_applied: bool = False
 
 
 class CandidateType(StrEnum):
@@ -276,6 +318,98 @@ class LearningRun(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class ExtractedType(StrEnum):
+    EXPERIENCE = "experience"
+    LEARNING_POINT = "learning_point"
+
+
+class FlamePoolState(StrEnum):
+    PENDING = "pending"
+    PROCESSED = "processed"
+
+
+class FlameRunState(StrEnum):
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class SessionRecord(BaseModel):
+    session_id: str
+    agent_id: str
+    tenant_id: str = "default"
+    initial_input: str
+    exchange_log: list[dict[str, str]] = Field(default_factory=list)
+    final_output: str = ""
+    human_feedback_present: bool = False
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
+class ExtractedItem(BaseModel):
+    extracted_id: str = Field(default_factory=lambda: new_id("ext"))
+    session_id: str
+    agent_id: str
+    tenant_id: str = "default"
+    extracted_at: datetime = Field(default_factory=utc_now)
+    type: ExtractedType
+    content: str
+    human_feedback_weight: float = Field(default=0.0, ge=0.0, le=1.0)
+    source_feedback_snippets: list[str] = Field(default_factory=list)
+
+
+class PoolItem(BaseModel):
+    pool_item_id: str = Field(default_factory=lambda: new_id("fpl"))
+    agent_id: str
+    tenant_id: str = "default"
+    session_id: str
+    extracted_type: ExtractedType
+    content: str
+    human_feedback_weight: float = Field(default=0.0, ge=0.0, le=1.0)
+    source_feedback_snippets: list[str] = Field(default_factory=list)
+    embedding: list[float] = Field(default_factory=list)
+    state: FlamePoolState = FlamePoolState.PENDING
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ReflectionItem(BaseModel):
+    reflection_id: str = Field(default_factory=lambda: new_id("rfl"))
+    agent_id: str
+    tenant_id: str = "default"
+    content: str
+    derived_from: list[str] = Field(default_factory=list)
+    human_feedback_weighted: bool = False
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class ReflectionBatchRun(BaseModel):
+    run_id: str = Field(default_factory=lambda: new_id("flr"))
+    agent_id: str
+    tenant_id: str = "default"
+    trigger_reason: Literal["size", "time", "force"]
+    state: FlameRunState = FlameRunState.SKIPPED
+    pool_item_ids: list[str] = Field(default_factory=list)
+    reflection_ids: list[str] = Field(default_factory=list)
+    cluster_count: int = 0
+    error: str | None = None
+    extraction_prompt_version: str | None = None
+    extraction_prompt_hash: str | None = None
+    reflection_prompt_version: str | None = None
+    reflection_prompt_hash: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class FlameStatus(BaseModel):
+    agent_id: str
+    tenant_id: str = "default"
+    pending_pool_items: int = 0
+    oldest_pending_age_seconds: int | None = None
+    last_run_state: FlameRunState | None = None
+    last_run_at: datetime | None = None
+
+
 class PromotionPolicy(BaseModel):
     agent_id: str
     tenant_id: str = "default"
@@ -317,6 +451,80 @@ class RollbackRecord(BaseModel):
     reason: str = ""
     created_at: datetime = Field(default_factory=utc_now)
     applied_at: datetime | None = None
+
+
+class ModelCapability(BaseModel):
+    model_id: str
+    context_window: int = Field(ge=1)
+    max_output_tokens: int = Field(ge=1)
+    input_price_per_1m: float | None = Field(default=None, ge=0.0)
+    output_price_per_1m: float | None = Field(default=None, ge=0.0)
+    cached_input_price_per_1m: float | None = Field(default=None, ge=0.0)
+    source: Literal["local_catalog", "provider_verified"] = "local_catalog"
+    catalog_version: str = "2026-05-02"
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class UsageRecord(BaseModel):
+    usage_id: str = Field(default_factory=lambda: new_id("usg"))
+    agent_id: str
+    tenant_id: str = "default"
+    session_id: str | None = None
+    operation_bucket: Literal[
+        "main_run",
+        "reflection",
+        "compaction",
+        "summarization",
+        "tool_evidence_processing",
+        "embedding",
+        "flame_extraction",
+        "flame_reflection",
+    ]
+    model: str | None = None
+    request_bytes: int = Field(default=0, ge=0)
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    reasoning_tokens: int = Field(default=0, ge=0)
+    total_tokens: int = Field(default=0, ge=0)
+    latency_ms: int = Field(default=0, ge=0)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class CostRecord(BaseModel):
+    cost_id: str = Field(default_factory=lambda: new_id("cst"))
+    usage_id: str
+    agent_id: str
+    tenant_id: str = "default"
+    operation_bucket: Literal[
+        "main_run",
+        "reflection",
+        "compaction",
+        "summarization",
+        "tool_evidence_processing",
+        "embedding",
+        "flame_extraction",
+        "flame_reflection",
+    ]
+    model: str | None = None
+    estimated_cost_usd: float | None = Field(default=None, ge=0.0)
+    cost_status: Literal["computed", "unsupported"] = "unsupported"
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class AgentStatus(BaseModel):
+    agent_id: str
+    tenant_id: str = "default"
+    model: str
+    tier: AgentTier
+    learning_enabled: bool
+    open_sessions: int = 0
+    accepted_sessions: int = 0
+    queued_learning_jobs: int = 0
+    failed_jobs: int = 0
+    promoted_memories: int = 0
+    rejected_candidates: int = 0
+    rolled_back_candidates: int = 0
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class ToolScope(StrEnum):

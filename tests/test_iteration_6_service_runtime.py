@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from agent_os import AgentOS
+from agent_os import AgentOS, AgentTier
 from agent_os.cli.app import app
 from agent_os.service import create_service_app
 
@@ -31,7 +31,13 @@ def _auth_headers(tmp_path, tenant_id: str = "t1", roles: list[str] | None = Non
 
 def test_idempotency_reuses_mutating_result(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="project_selector", goal="Select projects.", model="gpt-4.1-mini", tenant_id="t1")
+    agent_os.create_agent(
+        agent_id="project_selector",
+        goal="Select projects.",
+        model="gpt-4.1-mini",
+        tenant_id="t1",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     auth = _auth_headers(tmp_path)
     client = TestClient(create_service_app(agent_os))
     headers = {"x-idempotency-key": "same-key-1"}
@@ -48,7 +54,13 @@ def test_idempotency_reuses_mutating_result(tmp_path) -> None:
 
 def test_queue_retry_and_dead_letter(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="project_selector", goal="Select projects.", model="gpt-4.1-mini", tenant_id="t1")
+    agent_os.create_agent(
+        agent_id="project_selector",
+        goal="Select projects.",
+        model="gpt-4.1-mini",
+        tenant_id="t1",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     bad = agent_os.jobs.enqueue(
         type="tool_call_async",
         payload={"agent_id": "project_selector", "tool_id": "missing_tool", "args": {}},
@@ -62,7 +74,13 @@ def test_queue_retry_and_dead_letter(tmp_path) -> None:
 
 def test_api_session_flow_end_to_end(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="proposal_writer", goal="Write proposals.", model="gpt-4.1-mini", tenant_id="t1")
+    agent_os.create_agent(
+        agent_id="proposal_writer",
+        goal="Write proposals.",
+        model="gpt-4.1-mini",
+        tenant_id="t1",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     auth = _auth_headers(tmp_path)
     client = TestClient(create_service_app(agent_os))
 
@@ -83,7 +101,13 @@ def test_api_session_flow_end_to_end(tmp_path) -> None:
 
 def test_learning_async_job_pipeline(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="project_selector", goal="Select projects.", model="gpt-4.1-mini", tenant_id="t1")
+    agent_os.create_agent(
+        agent_id="project_selector",
+        goal="Select projects.",
+        model="gpt-4.1-mini",
+        tenant_id="t1",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     session = agent_os.sessions.init("project_selector", "Select low risk projects.")
     agent_os.sessions.run(session.session_id)
     agent_os.sessions.feedback(session.session_id, "Prefer delivery risk.")
@@ -99,7 +123,13 @@ def test_learning_async_job_pipeline(tmp_path) -> None:
 
 def test_tools_async_and_audit(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="project_selector", goal="Select projects.", model="gpt-4.1-mini", tenant_id="t1")
+    agent_os.create_agent(
+        agent_id="project_selector",
+        goal="Select projects.",
+        model="gpt-4.1-mini",
+        tenant_id="t1",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     manifest = agent_os.tools.register_from_fields(name="project_db.search")
     manifest.tenant_id = "t1"
     agent_os.tools.register(manifest)
@@ -131,13 +161,51 @@ def test_readiness_and_metrics(tmp_path) -> None:
     assert isinstance(metrics.json(), dict)
 
 
+def test_api_json_schema_agent_run_returns_content_json(tmp_path) -> None:
+    agent_os = AgentOS.load(root=tmp_path / ".agent-os")
+    agent_os.create_agent(
+        agent_id="json_writer",
+        goal="Write structured proposals.",
+        model="gpt-4.1-mini",
+        tenant_id="t1",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+        output_mode="json_schema",
+        output_schema={
+            "type": "object",
+            "required": ["title"],
+            "properties": {"title": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    )
+    auth = _auth_headers(tmp_path)
+    client = TestClient(create_service_app(agent_os))
+    init = client.post("/sessions/init", json={"agent_id": "json_writer", "input": "Draft proposal."}, headers=auth)
+    session_id = init.json()["data"]["session_id"]
+    run = client.post(f"/sessions/{session_id}/run", headers=auth)
+    assert run.status_code == 200
+    assert isinstance(run.json()["data"].get("content_json"), dict)
+    assert "title" in run.json()["data"]["content_json"]
+
+
 def test_worker_cli_run_once_and_tick(tmp_path) -> None:
     runner = CliRunner()
     root = str(tmp_path / ".agent-os")
     assert runner.invoke(app, ["init", "--root", root]).exit_code == 0
     assert runner.invoke(
         app,
-        ["create", "agent", "project_selector", "--goal", "Select projects.", "--model", "gpt-4.1-mini", "--root", root],
+        [
+            "create",
+            "agent",
+            "project_selector",
+            "--goal",
+            "Select projects.",
+            "--model",
+            "gpt-4.1-mini",
+            "--agent-tier",
+            "self_learning_agent",
+            "--root",
+            root,
+        ],
     ).exit_code == 0
     queued = runner.invoke(
         app,

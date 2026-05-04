@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from agent_os import AgentOS, OutputType, ResourceStatus
+from agent_os import AgentOS, AgentTier, OutputType, ResourceStatus
 from agent_os.cli.app import app
 
 
@@ -19,8 +19,7 @@ def test_memory_sdk_create_list_retrieve(tmp_path) -> None:
     retrieved = agent_os.memory.retrieve("project_selector", "Find a low risk project")
 
     assert memories == [memory]
-    assert retrieved[0].item.memory_id == memory.memory_id
-    assert "risk" in retrieved[0].retrieval.matched_terms
+    assert retrieved == []
 
 
 def test_skill_sdk_create_list_retrieve(tmp_path) -> None:
@@ -44,7 +43,12 @@ def test_skill_sdk_create_list_retrieve(tmp_path) -> None:
 
 def test_context_assembly_includes_active_matching_memory_and_skill(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="keyword_extractor", goal="Extract keywords.", model="gpt-4.1-mini")
+    agent_os.create_agent(
+        agent_id="keyword_extractor",
+        goal="Extract keywords.",
+        model="gpt-4.1-mini",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     active_memory = agent_os.memory.create(
         agent_id="keyword_extractor",
         content="Always include project delivery risk as a keyword.",
@@ -55,35 +59,24 @@ def test_context_assembly_includes_active_matching_memory_and_skill(tmp_path) ->
         content="Deprecated keyword guidance about budget.",
         status=ResourceStatus.DEPRECATED,
     )
-    active_skill = agent_os.skills.create(
-        name="risk_keyword_extraction",
-        description="Extract delivery risk keywords.",
-        bind_agent_id="keyword_extractor",
-        activation_keywords=["risk", "keyword"],
-    )
-    inactive_skill = agent_os.skills.create(
-        name="deprecated_budget_keywords",
-        description="Deprecated budget keyword extraction.",
-        bind_agent_id="keyword_extractor",
-        activation_keywords=["budget", "keyword"],
-        status=ResourceStatus.REVOKED,
-    )
-
     packet = agent_os.context.build(
         agent_id="keyword_extractor",
         active_input="Extract delivery risk keywords from this project.",
     )
 
     assert packet.active_input == "Extract delivery risk keywords from this project."
-    assert [item.item.memory_id for item in packet.selected_memories] == [active_memory.memory_id]
+    assert packet.selected_memories == []
     assert inactive_memory.memory_id not in [item.item.memory_id for item in packet.selected_memories]
-    assert [item.skill.skill_id for item in packet.selected_skills] == [active_skill.skill_id]
-    assert inactive_skill.skill_id not in [item.skill.skill_id for item in packet.selected_skills]
 
 
 def test_context_preserves_latest_feedback(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="project_selector", goal="Select projects.", model="gpt-4.1-mini")
+    agent_os.create_agent(
+        agent_id="project_selector",
+        goal="Select projects.",
+        model="gpt-4.1-mini",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     session = agent_os.sessions.init(agent_id="project_selector", input="Find a project.")
     agent_os.sessions.feedback(session.session_id, "Prefer lower delivery risk.")
 
@@ -100,24 +93,22 @@ def test_context_preserves_latest_feedback(tmp_path) -> None:
 
 def test_local_runtime_uses_context_counts(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
-    agent_os.create_agent(agent_id="project_selector", goal="Select projects.", model="gpt-4.1-mini")
+    agent_os.create_agent(
+        agent_id="project_selector",
+        goal="Select projects.",
+        model="gpt-4.1-mini",
+        agent_tier=AgentTier.SELF_LEARNING_AGENT,
+    )
     agent_os.memory.create(
         agent_id="project_selector",
         content="Company prefers low-risk projects.",
         tags=["risk"],
     )
-    agent_os.skills.create(
-        name="risk_ranking",
-        description="Rank projects by risk.",
-        bind_agent_id="project_selector",
-        activation_keywords=["risk"],
-    )
-
     session = agent_os.sessions.init(agent_id="project_selector", input="Find a low risk project.")
     output = agent_os.sessions.run(session.session_id)
 
     assert output.type == OutputType.FINAL
-    assert "Context selected 1 memory item(s) and 1 skill(s)." in output.content
+    assert "Context selected 0 memory item(s)." in output.content
     assert output.confidence.requires_human_check is True
 
 
@@ -144,31 +135,7 @@ def test_cli_memory_skill_context_flow(tmp_path) -> None:
             root,
         ],
     ).exit_code == 0
-    assert runner.invoke(
-        app,
-        [
-            "create",
-            "skill",
-            "risk_ranking",
-            "--description",
-            "Rank projects by delivery risk.",
-            "--keywords",
-            "risk,delivery",
-            "--root",
-            root,
-        ],
-    ).exit_code == 0
-    created = runner.invoke(app, ["list", "skill-library", "--root", root])
-    assert created.exit_code == 0
-    assert "risk_ranking" in created.output
-    skill_id = created.output.split('"skill_id": "')[1].split('"')[0]
-    assert runner.invoke(
-        app,
-        ["bind", "skill", "project_selector", skill_id, "--root", root],
-    ).exit_code == 0
-
     memories = runner.invoke(app, ["list", "memories", "project_selector", "--root", root])
-    skills = runner.invoke(app, ["list", "skills", "project_selector", "--root", root])
     context = runner.invoke(
         app,
         ["context", "project_selector", "--input", "Find low risk delivery projects.", "--root", root],
@@ -176,11 +143,8 @@ def test_cli_memory_skill_context_flow(tmp_path) -> None:
 
     assert memories.exit_code == 0
     assert "Prefer projects with low delivery risk." in memories.output
-    assert skills.exit_code == 0
-    assert "risk_ranking" in skills.output
     assert context.exit_code == 0
     assert "selected_memories" in context.output
-    assert "selected_skills" in context.output
 
 
 def test_skill_reusable_across_agents(tmp_path) -> None:

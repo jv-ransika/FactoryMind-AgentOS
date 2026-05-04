@@ -88,3 +88,35 @@ def test_cli_smoke_flow(tmp_path) -> None:
     assert "confidence" in result.output
 
 
+def test_agent_definition_json_schema_mode_requires_schema(tmp_path) -> None:
+    agent_os = AgentOS.load(root=tmp_path / ".agent-os")
+    try:
+        agent_os.create_agent(
+            agent_id="json_agent_invalid",
+            goal="Return structured payload.",
+            model="gpt-4.1-mini",
+            output_mode="json_schema",
+        )
+        assert False, "Expected validation error for missing output_schema"
+    except ValueError as exc:
+        assert "output_schema is required" in str(exc)
+
+
+def test_agent_definition_json_schema_mode_with_schema(tmp_path) -> None:
+    agent_os = AgentOS.load(root=tmp_path / ".agent-os")
+    agent = agent_os.create_agent(
+        agent_id="json_agent_valid",
+        goal="Return structured payload.",
+        model="gpt-4.1-mini",
+        output_mode="json_schema",
+        output_schema={
+            "type": "object",
+            "required": ["title"],
+            "properties": {"title": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    )
+    assert agent.output_mode == "json_schema"
+    assert isinstance(agent.output_schema, dict)
+
+
