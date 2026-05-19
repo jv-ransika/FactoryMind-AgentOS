@@ -236,11 +236,11 @@ def run_campaign(
                     ]
                 )
 
-                before_ids = {m.memory_id for m in app.memory.list(agent.id)}
+                before_ids = {m.memory_id for m in app.flame.memory.list(agent.id)}
                 runs = app.flame.trigger(agent_id=agent.id, force=True)
                 run = runs[-1] if runs else None
                 after_pool = app.flame.list_pool(agent.id)
-                after_memories = app.memory.list(agent.id)
+                after_memories = app.flame.memory.list(agent.id)
                 new_memories = [
                     m
                     for m in after_memories

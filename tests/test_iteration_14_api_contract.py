@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+
 from agent_os import (
     AgentStatus,
     AgentOS,
@@ -8,7 +10,12 @@ from agent_os import (
     CostRecord,
     LearningCandidate,
     LearningRun,
+    MemoryEvent,
     MemoryItem,
+    MemoryRetrievalRequest,
+    MemoryRetrievalResult,
+    MemoryWriteRequest,
+    MemoryWriteResult,
     ModelCapability,
     STABLE_CORE_API,
     Session,
@@ -34,6 +41,11 @@ def test_stable_core_symbols_importable() -> None:
     assert SessionEvent is not None
     assert AgentOutput is not None
     assert MemoryItem is not None
+    assert MemoryEvent is not None
+    assert MemoryRetrievalRequest is not None
+    assert MemoryRetrievalResult is not None
+    assert MemoryWriteRequest is not None
+    assert MemoryWriteResult is not None
     assert LearningRun is not None
     assert LearningCandidate is not None
     assert ToolManifest is not None
@@ -47,8 +59,13 @@ def test_stable_core_symbols_importable() -> None:
 def test_stable_core_agentos_managers(tmp_path) -> None:
     app = AgentOS.load(root=tmp_path / ".agent-os", runtime_mode="local")
     assert app.sessions is not None
-    assert app.memory is not None
+    assert app.flame.memory is not None
     assert app.learning is not None
     assert app.tools is not None
     assert app.capabilities is not None
     assert app.monitor is not None
+
+
+def test_memory_manager_is_not_public_api() -> None:
+    memory_module = importlib.import_module("agent_os.memory")
+    assert not hasattr(memory_module, "MemoryManager")

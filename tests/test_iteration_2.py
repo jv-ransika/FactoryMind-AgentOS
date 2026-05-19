@@ -10,13 +10,13 @@ def test_memory_sdk_create_list_retrieve(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
     agent_os.create_agent(agent_id="project_selector", goal="Select projects.", model="gpt-4.1-mini")
 
-    memory = agent_os.memory.create(
+    memory = agent_os.flame.memory.create(
         agent_id="project_selector",
         content="Company prefers low-risk AI projects.",
         tags=["risk", "project"],
     )
-    memories = agent_os.memory.list("project_selector")
-    retrieved = agent_os.memory.retrieve("project_selector", "Find a low risk project")
+    memories = agent_os.flame.memory.list("project_selector")
+    retrieved = agent_os.flame.memory.retrieve("project_selector", "Find a low risk project")
 
     assert memories == [memory]
     assert retrieved == []
@@ -49,12 +49,12 @@ def test_context_assembly_includes_active_matching_memory_and_skill(tmp_path) ->
         model="gpt-4.1-mini",
         agent_tier=AgentTier.SELF_LEARNING_AGENT,
     )
-    active_memory = agent_os.memory.create(
+    active_memory = agent_os.flame.memory.create(
         agent_id="keyword_extractor",
         content="Always include project delivery risk as a keyword.",
         tags=["delivery", "risk"],
     )
-    inactive_memory = agent_os.memory.create(
+    inactive_memory = agent_os.flame.memory.create(
         agent_id="keyword_extractor",
         content="Deprecated keyword guidance about budget.",
         status=ResourceStatus.DEPRECATED,
@@ -99,7 +99,7 @@ def test_local_runtime_uses_context_counts(tmp_path) -> None:
         model="gpt-4.1-mini",
         agent_tier=AgentTier.SELF_LEARNING_AGENT,
     )
-    agent_os.memory.create(
+    agent_os.flame.memory.create(
         agent_id="project_selector",
         content="Company prefers low-risk projects.",
         tags=["risk"],

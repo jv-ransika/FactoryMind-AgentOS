@@ -37,7 +37,7 @@ def test_learning_run_dispatches_to_flame_and_records_run(tmp_path) -> None:
 
     run = agent_os.learning.run(agent_id="proposal_writer", window_size=20)
     runs = agent_os.flame.list_runs("proposal_writer")
-    memories = agent_os.memory.list("proposal_writer")
+    memories = agent_os.flame.memory.list("proposal_writer")
 
     assert run.experience_count >= 1
     assert run.candidate_ids == []
@@ -268,7 +268,7 @@ def test_flame_reflection_openai_empty_reflections_valid_noop(monkeypatch, tmp_p
 
     run = agent_os.learning.run("proposal_writer")
     runs = agent_os.flame.list_runs("proposal_writer")
-    memories = agent_os.memory.list("proposal_writer")
+    memories = agent_os.flame.memory.list("proposal_writer")
     assert run.experience_count >= 1
     assert runs
     assert runs[0].state == FlameRunState.SUCCESS
@@ -308,7 +308,7 @@ def test_flame_reflection_openai_discards_low_confidence_and_keeps_valid(monkeyp
     _make_accepted_session(agent_os, "proposal_writer", "Draft proposal", "Be direct and explicit.")
 
     agent_os.learning.run("proposal_writer")
-    memories = agent_os.memory.list("proposal_writer")
+    memories = agent_os.flame.memory.list("proposal_writer")
     assert len(memories) == 1
     assert memories[0].confidence >= 0.2
 
@@ -348,7 +348,7 @@ def test_flame_reflection_openai_all_low_confidence_yields_no_memory(monkeypatch
     runs_before = len(agent_os.flame.list_runs("proposal_writer"))
     agent_os.learning.run("proposal_writer")
     runs = agent_os.flame.list_runs("proposal_writer")
-    memories = agent_os.memory.list("proposal_writer")
+    memories = agent_os.flame.memory.list("proposal_writer")
     assert len(runs) >= runs_before + 1
     assert runs[0].state == FlameRunState.SUCCESS
     assert len(memories) == 0
@@ -387,7 +387,7 @@ def test_flame_reflection_openai_malformed_item_type_uses_fallback(monkeypatch, 
     _make_accepted_session(agent_os, "proposal_writer", "Draft proposal", "Use active voice.")
 
     agent_os.learning.run("proposal_writer")
-    memories = agent_os.memory.list("proposal_writer")
+    memories = agent_os.flame.memory.list("proposal_writer")
     assert memories  # fallback synthesizes reflection deterministically
     assert any(m.metadata.get("created_by") == "flame_reflection" for m in memories)
 
@@ -624,7 +624,7 @@ def test_flame_reflection_content_truncates_and_metrics(monkeypatch, tmp_path) -
     assert pool_before
     assert all(len(item.content) == FLAME_TEMP_CONTENT_MAX_CHARS for item in pool_before)
     agent_os.learning.run("proposal_writer")
-    memories = agent_os.memory.list("proposal_writer")
+    memories = agent_os.flame.memory.list("proposal_writer")
     assert memories
     assert all(len(memory.content) <= FLAME_REFLECTION_CONTENT_MAX_CHARS for memory in memories)
     metrics = json.loads((root / "metrics" / "metrics.json").read_text(encoding="utf-8"))

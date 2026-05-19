@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent_os.monitoring import UsageTracker, record_usage_and_cost
-from agent_os.embeddings import EmbeddingProvider
 from agent_os.capabilities import ModelCapabilityRegistry
+from agent_os.embeddings import EmbeddingProvider
+from agent_os.monitoring import UsageTracker, record_usage_and_cost
 from agent_os.protocol import (
+    MemoryEvent,
     MemoryItem,
+    MemoryRetrievalRequest,
+    MemoryRetrievalResult,
     MemoryScope,
     MemoryType,
+    MemoryWriteRequest,
+    MemoryWriteResult,
     ResourceStatus,
     RetrievalResult,
     RetrievedMemory,
@@ -16,7 +21,7 @@ from agent_os.protocol import (
 from agent_os.storage import DomainStore
 
 
-class MemoryManager:
+class FlameMemorySystem:
     def __init__(
         self,
         store: DomainStore,
@@ -101,6 +106,33 @@ class MemoryManager:
             )
 
         return results[:top_k]
+
+    def write(self, request: MemoryWriteRequest) -> MemoryWriteResult:
+        return MemoryWriteResult(
+            memory=self.create(
+                agent_id=request.agent_id,
+                content=request.content,
+                summary=request.summary,
+                scope=request.scope,
+                memory_type=request.memory_type,
+                tags=request.tags,
+                metadata=request.metadata,
+                confidence=request.confidence,
+                status=request.status,
+            )
+        )
+
+    def retrieve_for_context(self, request: MemoryRetrievalRequest) -> MemoryRetrievalResult:
+        return MemoryRetrievalResult(memories=self.retrieve(agent_id=request.agent_id, query=request.query, limit=request.limit))
+
+    def ingest_event(self, event: MemoryEvent) -> dict[str, Any]:
+        self.metrics and self.metrics.inc("flame_memory_events_ingested")
+        return {
+            "accepted": True,
+            "event_type": event.event_type,
+            "agent_id": event.agent_id,
+            "session_id": event.session_id,
+        }
 
     def _save_embedding(self, memory: MemoryItem) -> None:
         if self.embedding_provider is None:

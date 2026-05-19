@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from agent_os.capabilities import ModelCapabilityRegistry
-from agent_os.memory import MemoryManager
+from agent_os.flame.memory import FlameMemorySystem
 from agent_os.monitoring import UsageTracker, record_usage_and_cost
 from agent_os.observability import MetricsStore
 from agent_os.protocol import (
@@ -190,7 +190,7 @@ class FlameManager:
     def __init__(
         self,
         store: DomainStore,
-        memory: MemoryManager,
+        memory: FlameMemorySystem,
         runtime: Any | None = None,
         metrics: MetricsStore | None = None,
         usage_tracker: UsageTracker | None = None,

@@ -108,7 +108,7 @@ def create_memory(
 ) -> None:
     """Create a local memory item for an agent."""
     agent_os = AgentOS.load(root=root)
-    memory = agent_os.memory.create(
+    memory = agent_os.flame.memory.create(
         agent_id=agent,
         content=content,
         summary=summary,
@@ -215,7 +215,7 @@ def bind_tool(
 def list_memories(agent: str, root: str = ".agent-os") -> None:
     """List local memory items for an agent."""
     agent_os = AgentOS.load(root=root)
-    memories = agent_os.memory.list(agent)
+    memories = agent_os.flame.memory.list(agent)
     typer.echo(json.dumps([memory.model_dump(mode="json") for memory in memories], indent=2))
 
 

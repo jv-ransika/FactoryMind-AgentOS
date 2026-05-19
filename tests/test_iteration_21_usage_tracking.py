@@ -7,7 +7,7 @@ import httpx
 from agent_os import AgentOS, AgentTier
 from agent_os.capabilities import ModelCapabilityRegistry
 from agent_os.embeddings.openai import OpenAIEmbeddingProvider
-from agent_os.memory.manager import MemoryManager
+from agent_os.flame import FlameMemorySystem
 from agent_os.monitoring import UsageTracker
 from agent_os.protocol import RuntimeConfig
 from agent_os.runtime import OpenAIRuntimeAdapter
@@ -33,7 +33,7 @@ def test_embedding_usage_bucket_is_recorded(monkeypatch, tmp_path) -> None:
     app = AgentOS.load(root=root)
     app.create_agent("a1", goal="g1", model="gpt-4.1-mini", agent_tier=AgentTier.SELF_LEARNING_AGENT)
     provider = OpenAIEmbeddingProvider(api_key="k")
-    mgr = MemoryManager(
+    mgr = FlameMemorySystem(
         store=store,
         embedding_provider=provider,
         usage_tracker=UsageTracker(root=root),

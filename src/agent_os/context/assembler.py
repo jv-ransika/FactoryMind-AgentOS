@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from agent_os.memory import MemoryManager
 from agent_os.protocol import AgentTier, ContextPacket, EventType, SessionEvent
 
 
 class ContextAssembler:
-    def __init__(self, memory: MemoryManager) -> None:
+    def __init__(self, memory) -> None:
         self.memory = memory
 
     def build(

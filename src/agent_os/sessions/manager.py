@@ -4,9 +4,12 @@ from agent_os.protocol import (
     AcceptanceMessage,
     AgentDefinition,
     AgentOutput,
+    ContextPacket,
     EventType,
     FeedbackMessage,
     InputMessage,
+    OutputType,
+    RuntimeConfig,
     Session,
     SessionEvent,
 )
@@ -47,20 +50,15 @@ class SessionManager:
         events = self.store.load_events(session_id)
         agent = self._agent_for_events(events)
         input_text = self._latest_input(events)
-        context = None
-        if self.context is not None:
-            budget = None
-            cfg = getattr(self.runtime, "config", None)
-            if cfg is not None:
-                budget = int(getattr(cfg, "default_token_budget", 2500))
-            context = self.context.build(
-                agent_id=agent.id,
-                active_input=input_text,
-                events=events,
-                token_budget=budget,
-                agent_tier=agent.agent_tier,
-            )
+        context = self._build_context(agent=agent, events=events, input_text=input_text)
         output = self.runtime.run(agent=agent, events=events, input_text=input_text, context=context)
+        output = self._repair_low_confidence_output(
+            agent=agent,
+            events=events,
+            input_text=input_text,
+            context=context,
+            output=output,
+        )
         self.store.append_event(
             SessionEvent(
                 session_id=session_id,
@@ -105,6 +103,79 @@ class SessionManager:
 
     def events(self, session_id: str) -> list[SessionEvent]:
         return self.store.load_events(session_id)
+
+    def _build_context(self, agent: AgentDefinition, events: list[SessionEvent], input_text: str) -> ContextPacket | None:
+        if self.context is None:
+            return None
+        budget = None
+        cfg = self._runtime_config()
+        if cfg is not None:
+            budget = int(getattr(cfg, "default_token_budget", 2500))
+        return self.context.build(
+            agent_id=agent.id,
+            active_input=input_text,
+            events=events,
+            token_budget=budget,
+            agent_tier=agent.agent_tier,
+        )
+
+    def _repair_low_confidence_output(
+        self,
+        agent: AgentDefinition,
+        events: list[SessionEvent],
+        input_text: str,
+        context: ContextPacket | None,
+        output: AgentOutput,
+    ) -> AgentOutput:
+        cfg = self._runtime_config()
+        if cfg is None:
+            cfg = RuntimeConfig()
+        if not bool(getattr(cfg, "confidence_repair_enabled", True)):
+            return output
+        max_attempts = int(getattr(cfg, "confidence_repair_max_attempts", 1))
+        if max_attempts <= 0:
+            return output
+        threshold = float(getattr(cfg, "confidence_threshold", 0.60))
+
+        initial_output = output
+        attempts = 0
+        while (
+            attempts < max_attempts
+            and output.type == OutputType.FINAL
+            and float(output.confidence.score) < threshold
+        ):
+            attempts += 1
+            repair_input = self._confidence_repair_input(input_text=input_text, output=output, threshold=threshold)
+            repair_context = self._build_context(agent=agent, events=events, input_text=repair_input) or context
+            output = self.runtime.run(agent=agent, events=events, input_text=repair_input, context=repair_context)
+
+        if attempts:
+            output.runtime_metadata = {
+                **output.runtime_metadata,
+                "confidence_repair_attempted": True,
+                "confidence_repair_attempts": attempts,
+                "initial_confidence_score": initial_output.confidence.score,
+                "initial_confidence_basis": list(initial_output.confidence.basis),
+            }
+        return output
+
+    @staticmethod
+    def _confidence_repair_input(input_text: str, output: AgentOutput, threshold: float) -> str:
+        return (
+            f"{input_text}\n\n"
+            "Your previous final answer had low confidence "
+            f"({output.confidence.score:.2f}, below the threshold {threshold:.2f}). "
+            "If you do not have enough information, ask a clarifying question. "
+            "Do not guess. If you can improve the answer using available context, "
+            "return a better answer with updated confidence.\n\n"
+            f"Previous answer: {output.content}\n"
+            f"Confidence basis: {', '.join(output.confidence.basis) if output.confidence.basis else 'none'}\n"
+            f"Uncertainties: {', '.join(output.confidence.uncertainties) if output.confidence.uncertainties else 'none'}"
+        )
+
+    def _runtime_config(self) -> RuntimeConfig | None:
+        cfg = getattr(self.runtime, "config", None)
+        return cfg if isinstance(cfg, RuntimeConfig) else cfg
 
     def _agent_for_events(self, events: list[SessionEvent]) -> AgentDefinition:
         if not events:

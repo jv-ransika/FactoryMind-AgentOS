@@ -22,7 +22,7 @@ class MonitorManager:
             elif status == "open":
                 open_sessions += 1
 
-        memories = self.agent_os.memory.list(agent_id)
+        memories = self.agent_os.flame.memory.list(agent_id)
         promoted = len([m for m in memories if m.metadata.get("created_by") == "flame_reflection"])
         rejected = 0
         rolled_back = 0

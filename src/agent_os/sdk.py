@@ -5,13 +5,12 @@ import os
 
 from agent_os.capabilities import ModelCapabilityRegistry
 from agent_os.context import ContextAssembler
-from agent_os.flame import FlameManager
+from agent_os.flame import FlameManager, FlameMemorySystem
 from agent_os.embeddings import OpenAIEmbeddingProvider
 from agent_os.context.window_manager import ContextWindowManager
 from agent_os.idempotency import IdempotencyStore
 from agent_os.jobs import JobManager
 from agent_os.learning import LearningManager
-from agent_os.memory import MemoryManager
 from agent_os.monitoring import MonitorManager, UsageTracker
 from agent_os.observability import MetricsStore
 from agent_os.ops.deps import check_dependencies, environment_mode
@@ -61,7 +60,7 @@ class AgentOS:
             )
         self.usage = UsageTracker(root=self.root)
         self.capabilities = ModelCapabilityRegistry(root=self.root)
-        self.memory = MemoryManager(
+        flame_memory = FlameMemorySystem(
             store=self.store,
             embedding_provider=embedding_provider,
             vector_top_k=int(getattr(cfg, "memory_vector_top_k", 5) if cfg is not None else 5),
@@ -71,12 +70,12 @@ class AgentOS:
         )
         self.skills = SkillManager(store=self.store)
         self.tools = ToolManager(store=self.store)
-        self.context = ContextAssembler(memory=self.memory)
+        self.context = ContextAssembler(memory=flame_memory)
         flame_pool_size_trigger = int(getattr(cfg, "flame_pool_size_trigger", 12))
         flame_time_trigger_hours = int(getattr(cfg, "flame_time_trigger_hours", 24))
         self.flame = FlameManager(
             store=self.store,
-            memory=self.memory,
+            memory=flame_memory,
             runtime=self.runtime,
             usage_tracker=self.usage,
             capabilities=self.capabilities,

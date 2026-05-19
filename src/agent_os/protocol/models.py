@@ -101,7 +101,7 @@ class AgentDefinition(BaseModel):
     goal: str
     model: str
     tenant_id: str = "default"
-    version: str = "1.3.0"
+    version: str = "2.0.0"
     agent_tier: AgentTier = AgentTier.BASIC_AGENT
     learning_mode: LearningMode = LearningMode.COLLECT_ONLY
     tools: list[str] = Field(default_factory=list)
@@ -123,7 +123,7 @@ class Session(BaseModel):
     status: SessionStatus = SessionStatus.OPEN
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
-    agent_version: str = "1.3.0"
+    agent_version: str = "2.0.0"
 
 
 class SessionEvent(BaseModel):
@@ -134,7 +134,7 @@ class SessionEvent(BaseModel):
     type: EventType
     created_at: datetime = Field(default_factory=utc_now)
     payload: dict[str, Any] = Field(default_factory=dict)
-    agent_version: str = "1.3.0"
+    agent_version: str = "2.0.0"
 
 
 class InputMessage(BaseModel):
@@ -193,6 +193,40 @@ class RetrievedMemory(BaseModel):
     retrieval: RetrievalResult
 
 
+class MemoryWriteRequest(BaseModel):
+    agent_id: str
+    content: str
+    summary: str = ""
+    scope: MemoryScope = MemoryScope.AGENT
+    memory_type: MemoryType = MemoryType.SEMANTIC
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    status: ResourceStatus = ResourceStatus.ACTIVE
+
+
+class MemoryWriteResult(BaseModel):
+    memory: MemoryItem
+
+
+class MemoryRetrievalRequest(BaseModel):
+    agent_id: str
+    query: str
+    limit: int = Field(default=5, ge=1)
+
+
+class MemoryRetrievalResult(BaseModel):
+    memories: list[RetrievedMemory] = Field(default_factory=list)
+
+
+class MemoryEvent(BaseModel):
+    event_type: str
+    agent_id: str | None = None
+    tenant_id: str = "default"
+    session_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class RetrievedSkill(BaseModel):
     skill: SkillDefinition
     retrieval: RetrievalResult
@@ -227,6 +261,9 @@ class RuntimeConfig(BaseModel):
     embedding_provider: str = "openai"
     embedding_model: str = "text-embedding-3-small"
     memory_vector_top_k: int = Field(default=5, ge=1)
+    confidence_repair_enabled: bool = True
+    confidence_threshold: float = Field(default=0.60, ge=0.0, le=1.0)
+    confidence_repair_max_attempts: int = Field(default=1, ge=0)
 
 
 class RuntimeMetadata(BaseModel):
