@@ -12,7 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "FactoryMind AgentOS Team" }]
 dependencies = [
   "pydantic>=2.7,<3",
-  "flame-memory @ git+file:///C:/Users/User/Documents/flame-memory",
+  "flame-memory @ git+https://github.com/jv-ransika/flame-memory.git@v0.1.0",
   "typer>=0.12,<1",
   "fastapi>=0.115,<1",
   "uvicorn>=0.30,<1",
