@@ -8,6 +8,7 @@
 
 ### FLAME Memory System
 - Refactored FLAME into the primary in-repo memory system boundary through `app.flame.memory`.
+- Split FLAME into the standalone import package boundary `flame_memory` while keeping `app.flame.memory` and `agent_os.flame` compatibility shims.
 - Added Python port models for future universal integrations: `MemoryWriteRequest`, `MemoryWriteResult`, `MemoryRetrievalRequest`, `MemoryRetrievalResult`, and `MemoryEvent`.
 - Removed `AgentOS.memory` from the stable public API direction; memory operations should use `AgentOS.flame.memory`.
 - Routed AgentOS context assembly, CLI memory commands, monitoring, and FLAME reflection writes through FLAME memory.

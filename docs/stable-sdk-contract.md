@@ -55,6 +55,7 @@ FactoryMind AgentOS `v2.0.0` defines a breaking stable contract where FLAME is t
 ## FLAME Memory System
 
 FLAME owns memory operations for AgentOS and future external agent clients.
+The implementation now lives behind the standalone Python import boundary `flame_memory`; `agent_os.flame` remains a compatibility shim.
 
 Primary SDK calls:
 
@@ -65,7 +66,7 @@ Primary SDK calls:
 - `app.flame.memory.retrieve_for_context(MemoryRetrievalRequest(...))`
 - `app.flame.memory.ingest_event(MemoryEvent(...))`
 
-Storage adapters remain unchanged in this step. FLAME memory uses the existing `DomainStore` memory persistence underneath.
+AgentOS storage adapters remain unchanged. FLAME reaches them through AgentOS adapter ports while keeping the existing persistence layout.
 
 ## Tier Rules
 

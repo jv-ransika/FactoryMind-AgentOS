@@ -47,5 +47,5 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agent_os"]
+packages = ["src/agent_os", "src/flame_memory"]
 

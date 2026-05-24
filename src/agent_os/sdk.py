@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 import os
 
+from flame_memory import FlameManager, FlameMemorySystem
+
 from agent_os.capabilities import ModelCapabilityRegistry
 from agent_os.context import ContextAssembler
-from agent_os.flame import FlameManager, FlameMemorySystem
+from agent_os.flame.adapters import AgentOSFlameRuntimeAdapter, AgentOSFlameStoreAdapter, AgentOSFlameUsageRecorder
 from agent_os.embeddings import OpenAIEmbeddingProvider
 from agent_os.context.window_manager import ContextWindowManager
 from agent_os.idempotency import IdempotencyStore
@@ -60,13 +62,15 @@ class AgentOS:
             )
         self.usage = UsageTracker(root=self.root)
         self.capabilities = ModelCapabilityRegistry(root=self.root)
+        flame_store = AgentOSFlameStoreAdapter(self.store)
+        flame_runtime = AgentOSFlameRuntimeAdapter(self.runtime)
+        flame_usage = AgentOSFlameUsageRecorder(usage_tracker=self.usage, capabilities=self.capabilities)
         flame_memory = FlameMemorySystem(
-            store=self.store,
+            store=flame_store,
             embedding_provider=embedding_provider,
             vector_top_k=int(getattr(cfg, "memory_vector_top_k", 5) if cfg is not None else 5),
             metrics=self.metrics,
-            usage_tracker=self.usage,
-            capabilities=self.capabilities,
+            usage_recorder=flame_usage,
         )
         self.skills = SkillManager(store=self.store)
         self.tools = ToolManager(store=self.store)
@@ -74,11 +78,10 @@ class AgentOS:
         flame_pool_size_trigger = int(getattr(cfg, "flame_pool_size_trigger", 12))
         flame_time_trigger_hours = int(getattr(cfg, "flame_time_trigger_hours", 24))
         self.flame = FlameManager(
-            store=self.store,
+            store=flame_store,
             memory=flame_memory,
-            runtime=self.runtime,
-            usage_tracker=self.usage,
-            capabilities=self.capabilities,
+            runtime=flame_runtime,
+            usage_recorder=flame_usage,
             metrics=self.metrics if hasattr(self, "metrics") else None,
             pool_size_trigger=flame_pool_size_trigger,
             time_trigger_hours=flame_time_trigger_hours,

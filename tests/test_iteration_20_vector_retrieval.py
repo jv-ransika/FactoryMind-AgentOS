@@ -4,7 +4,7 @@ import httpx
 
 from agent_os import AgentOS, AgentTier
 from agent_os.embeddings.openai import OpenAIEmbeddingProvider
-from agent_os.flame import FlameMemorySystem
+from flame_memory import FlameMemorySystem
 from agent_os.protocol import ResourceStatus
 from agent_os.storage.local import LocalStore
 

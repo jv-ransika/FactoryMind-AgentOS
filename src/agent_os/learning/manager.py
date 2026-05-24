@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from agent_os.flame import FlameManager
 from agent_os.protocol import AgentTier, LearningRun, PromotionPolicy, PromotionState
 from agent_os.storage import DomainStore
+from flame_memory import FlameManager
 
 
 def utc_now() -> datetime:
