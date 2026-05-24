@@ -29,7 +29,7 @@ def run_smoke(root: Path) -> dict:
     runs = app.flame.list_runs(agent.id)
     if not runs:
         raise RuntimeError("No FLAME reflection run generated in smoke flow.")
-    memories = app.memory.list(agent.id)
+    memories = app.flame.memory.list(agent.id)
     reflected = [m for m in memories if m.metadata.get("created_by") == "flame_reflection"]
     if not reflected:
         raise RuntimeError("No reflected long-term memory created in smoke flow.")

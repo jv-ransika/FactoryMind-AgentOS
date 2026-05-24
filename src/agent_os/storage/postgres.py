@@ -39,7 +39,7 @@ from agent_os.protocol import (
 class PostgresDomainStore:
     def __init__(self, dsn: str, root: Path | str = ".agent-os") -> None:
         self.root = Path(root)
-        self.engine = create_engine(dsn, future=True)
+        self.engine = create_engine(self._normalize_dsn(dsn), future=True)
         self.md = MetaData()
         self.records = Table(
             "agent_os_records",
@@ -73,6 +73,12 @@ class PostgresDomainStore:
             Column("embedding", vector_column_type, nullable=False),
             Column("updated_at", String(64), nullable=False),
         )
+
+    @staticmethod
+    def _normalize_dsn(dsn: str) -> str:
+        if dsn.startswith("postgresql://"):
+            return dsn.replace("postgresql://", "postgresql+psycopg://", 1)
+        return dsn
 
     def init(self) -> None:
         self._require_pgvector_python()

@@ -1,4 +1,3 @@
-from agent_os.flame.manager import FlameManager
+from flame_memory import FlameManager, FlameMemorySystem
 
-__all__ = ["FlameManager"]
-
+__all__ = ["FlameManager", "FlameMemorySystem"]

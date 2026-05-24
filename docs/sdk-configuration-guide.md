@@ -15,9 +15,26 @@ Use `.agent-os/runtime.json` or env/secret references:
   "mode": "openai",
   "openai_api_key": "secret://OPENAI_API_KEY",
   "openai_base_url": "secret://OPENAI_BASE_URL",
-  "openai_timeout_ms": 20000
+  "openai_timeout_ms": 20000,
+  "confidence_repair_enabled": true,
+  "confidence_threshold": 0.6,
+  "confidence_repair_max_attempts": 1
 }
 ```
+
+### Confidence Repair
+
+Every `AgentOutput` includes confidence metadata. By default, `sessions.run(...)` automatically retries one low-confidence `final` output when `confidence.score < 0.60`.
+
+The repair retry gives the same agent a follow-up instruction to ask a clarifying question if the answer is uncertain, or to return a better-supported answer with updated confidence if the available context is enough.
+
+Runtime config fields:
+
+- `confidence_repair_enabled`: enables or disables the repair loop. Default: `true`.
+- `confidence_threshold`: final outputs below this score trigger repair. Default: `0.60`.
+- `confidence_repair_max_attempts`: maximum automatic repair attempts per session run. Default: `1`.
+
+Repair metadata is added to the returned output under `runtime_metadata`, including `confidence_repair_attempted`, `confidence_repair_attempts`, `initial_confidence_score`, and `initial_confidence_basis`.
 
 ## Secrets
 

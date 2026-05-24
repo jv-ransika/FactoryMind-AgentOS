@@ -8,6 +8,16 @@ from agent_os.protocol import RuntimeConfig
 from agent_os.secrets import SecretManager
 
 
+def _bool_config(value: object, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "off"}
+    return bool(value)
+
+
 def load_runtime_config(
     root: Path | str = ".agent-os",
     runtime_mode: str = "local",
@@ -45,5 +55,8 @@ def load_runtime_config(
         embedding_provider=str(os.getenv("AGENT_OS_EMBEDDING_PROVIDER") or file_cfg.get("embedding_provider", "openai")),
         embedding_model=str(os.getenv("AGENT_OS_EMBEDDING_MODEL") or file_cfg.get("embedding_model", "text-embedding-3-small")),
         memory_vector_top_k=int(os.getenv("AGENT_OS_MEMORY_VECTOR_TOP_K") or file_cfg.get("memory_vector_top_k", 5)),
+        confidence_repair_enabled=_bool_config(file_cfg.get("confidence_repair_enabled"), True),
+        confidence_threshold=float(file_cfg.get("confidence_threshold", 0.60)),
+        confidence_repair_max_attempts=int(file_cfg.get("confidence_repair_max_attempts", 1)),
     )
     return cfg

@@ -4,7 +4,7 @@ import httpx
 
 from agent_os import AgentOS, AgentTier
 from agent_os.embeddings.openai import OpenAIEmbeddingProvider
-from agent_os.memory.manager import MemoryManager
+from flame_memory import FlameMemorySystem
 from agent_os.protocol import ResourceStatus
 from agent_os.storage.local import LocalStore
 
@@ -54,7 +54,7 @@ def test_memory_create_writes_vector_when_provider_available(tmp_path, monkeypat
         captured["embedding"] = embedding
 
     monkeypatch.setattr(store, "save_memory_vector", _save_memory_vector)
-    manager = MemoryManager(store=store, embedding_provider=_StubEmbeddingProvider())
+    manager = FlameMemorySystem(store=store, embedding_provider=_StubEmbeddingProvider())
     memory = manager.create(agent_id="a1", content="Prefer low-risk delivery plans.")
     assert captured["agent_id"] == "a1"
     assert captured["memory_id"] == memory.memory_id
@@ -64,10 +64,10 @@ def test_memory_create_writes_vector_when_provider_available(tmp_path, monkeypat
 def test_vector_retrieve_returns_ranked_memories_from_store(tmp_path, monkeypatch) -> None:
     app = AgentOS.load(root=tmp_path / ".agent-os")
     app.create_agent(agent_id="a1", goal="g1", model="gpt-4.1-mini", agent_tier=AgentTier.SELF_LEARNING_AGENT)
-    m1 = app.memory.create(agent_id="a1", content="Prefer delivery-risk-first ranking.")
-    m2 = app.memory.create(agent_id="a1", content="Deprecated", status=ResourceStatus.DEPRECATED)
+    m1 = app.flame.memory.create(agent_id="a1", content="Prefer delivery-risk-first ranking.")
+    m2 = app.flame.memory.create(agent_id="a1", content="Deprecated", status=ResourceStatus.DEPRECATED)
 
-    manager = MemoryManager(store=app.store, embedding_provider=_StubEmbeddingProvider(), vector_top_k=5)
+    manager = FlameMemorySystem(store=app.store, embedding_provider=_StubEmbeddingProvider(), vector_top_k=5)
     monkeypatch.setattr(
         app.store,
         "query_memory_vectors",
@@ -81,9 +81,9 @@ def test_vector_retrieve_returns_ranked_memories_from_store(tmp_path, monkeypatc
 def test_vector_retrieve_unavailable_backend_returns_empty(tmp_path, monkeypatch) -> None:
     app = AgentOS.load(root=tmp_path / ".agent-os")
     app.create_agent(agent_id="a1", goal="g1", model="gpt-4.1-mini", agent_tier=AgentTier.SELF_LEARNING_AGENT)
-    app.memory.create(agent_id="a1", content="Prefer low-risk delivery plans.")
+    app.flame.memory.create(agent_id="a1", content="Prefer low-risk delivery plans.")
 
-    manager = MemoryManager(store=app.store, embedding_provider=_StubEmbeddingProvider())
+    manager = FlameMemorySystem(store=app.store, embedding_provider=_StubEmbeddingProvider())
     monkeypatch.setattr(
         app.store,
         "query_memory_vectors",

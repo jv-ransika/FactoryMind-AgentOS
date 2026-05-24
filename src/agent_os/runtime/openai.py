@@ -183,11 +183,14 @@ class OpenAIRuntimeAdapter(AgentRuntimeAdapter):
                         "fallback_reason": "agents_sdk_unavailable",
                     }
                 raise
-            except Exception as exc:
-                # In non-SDK environments, keep deterministic behavior for development/tests.
-                if "agents" in str(exc).lower():
-                    raise RuntimeError("runtime_config_error:OpenAI Agents SDK is not installed.")
-                raise
+            except Exception:
+                # Keep the adapter resilient when the SDK path is unavailable or fails before
+                # producing a typed result; the legacy Responses path preserves the public contract.
+                parsed, usage = self._call_model_with_retry(agent=agent, payload=payload)
+                return parsed, usage, {
+                    "runtime_engine": "legacy_openai",
+                    "fallback_reason": "agents_sdk_error",
+                }
         parsed, usage = self._call_model_with_retry(agent=agent, payload=payload)
         return parsed, usage, {"runtime_engine": "legacy_openai"}
 

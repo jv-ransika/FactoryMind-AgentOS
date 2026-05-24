@@ -121,11 +121,11 @@ def run_validation(
                 ]
             )
 
-            before_memory_ids = {m.memory_id for m in agent_os.memory.list(agent.id)}
+            before_memory_ids = {m.memory_id for m in agent_os.flame.memory.list(agent.id)}
             run_results = agent_os.flame.trigger(agent_id=agent.id, force=True)
             run = run_results[-1] if run_results else None
             after_pool = agent_os.flame.list_pool(agent.id)
-            after_memories = agent_os.memory.list(agent.id)
+            after_memories = agent_os.flame.memory.list(agent.id)
             new_memories = [
                 m
                 for m in after_memories

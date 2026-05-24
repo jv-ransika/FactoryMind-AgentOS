@@ -25,7 +25,7 @@ def _op(status: str, payload: dict, reused: bool = False, operation_id: str | No
 
 
 def create_service_app(agent_os: AgentOS, auth_config: AuthConfig | None = None) -> FastAPI:
-    app = FastAPI(title="FactoryMind AgentOS Service", version="1.3.0")
+    app = FastAPI(title="FactoryMind AgentOS Service", version="2.0.0")
     app.state.agent_os = agent_os
     app.state.worker_healthy = True
     app.state.env_mode = environment_mode()

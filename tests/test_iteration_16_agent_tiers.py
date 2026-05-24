@@ -16,7 +16,7 @@ def _accepted_session(agent_os: AgentOS, agent_id: str) -> str:
 def test_basic_agent_context_excludes_long_term_memory(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
     agent_os.create_agent(agent_id="a1", goal="g", model="gpt-4.1-mini", agent_tier=AgentTier.BASIC_AGENT)
-    agent_os.memory.create(agent_id="a1", content="Long-term preference memory", tags=["risk"])
+    agent_os.flame.memory.create(agent_id="a1", content="Long-term preference memory", tags=["risk"])
     packet = agent_os.context.build(agent_id="a1", active_input="Need risk plan")
     assert packet.selected_memories == []
 
@@ -24,7 +24,7 @@ def test_basic_agent_context_excludes_long_term_memory(tmp_path) -> None:
 def test_basic_agent_context_excludes_long_term_memory_with_existing_memory(tmp_path) -> None:
     agent_os = AgentOS.load(root=tmp_path / ".agent-os")
     agent_os.create_agent(agent_id="a2", goal="g", model="gpt-4.1-mini", agent_tier=AgentTier.BASIC_AGENT)
-    agent_os.memory.create(agent_id="a2", content="Prefer low risk delivery", tags=["risk"])
+    agent_os.flame.memory.create(agent_id="a2", content="Prefer low risk delivery", tags=["risk"])
     packet = agent_os.context.build(agent_id="a2", active_input="Need low risk path")
     assert packet.selected_memories == []
 

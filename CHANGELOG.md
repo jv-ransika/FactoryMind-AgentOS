@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### v2.0.0 Breaking Changes
+- Bumped package, service, protocol agent, and session version markers to `2.0.0`.
+- Removed the old public `MemoryManager` implementation; FLAME memory is now the memory system boundary.
+
+### FLAME Memory System
+- Refactored FLAME into the primary in-repo memory system boundary through `app.flame.memory`.
+- Split FLAME into the external `flame-memory` package, imported as `flame_memory`, while keeping `app.flame.memory` and `agent_os.flame` compatibility shims.
+- Added Python port models for future universal integrations: `MemoryWriteRequest`, `MemoryWriteResult`, `MemoryRetrievalRequest`, `MemoryRetrievalResult`, and `MemoryEvent`.
+- Removed `AgentOS.memory` from the stable public API direction; memory operations should use `AgentOS.flame.memory`.
+- Routed AgentOS context assembly, CLI memory commands, monitoring, and FLAME reflection writes through FLAME memory.
+
+### Runtime Reliability
+- Added configurable confidence repair for `sessions.run(...)`: low-confidence `final` outputs below the configured threshold retry once by default, asking the agent to clarify missing information or return a better-supported answer.
+- Added runtime config fields: `confidence_repair_enabled`, `confidence_threshold`, and `confidence_repair_max_attempts`.
+- Added repair trace metadata on returned outputs: `confidence_repair_attempted`, `confidence_repair_attempts`, `initial_confidence_score`, and `initial_confidence_basis`.
+- Normalized `postgresql://` DSNs to SQLAlchemy's `postgresql+psycopg://` dialect to match the project's `psycopg` dependency.
+
 ## v1.3.0 (2026-05-04)
 
 ### Stable Release Finalization

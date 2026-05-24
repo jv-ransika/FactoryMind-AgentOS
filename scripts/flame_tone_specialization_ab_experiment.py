@@ -283,11 +283,11 @@ def run_experiment(
                         }
                     )
 
-                memory_ids_before = {m.memory_id for m in app.memory.list(agent.id)}
+                memory_ids_before = {m.memory_id for m in app.flame.memory.list(agent.id)}
                 runs = app.flame.trigger(agent_id=agent.id, force=True)
                 run = runs[-1] if runs else None
                 pool_after = app.flame.list_pool(agent.id)
-                memories_after = app.memory.list(agent.id)
+                memories_after = app.flame.memory.list(agent.id)
                 new_reflection_memories = [
                     m for m in memories_after if m.memory_id not in memory_ids_before and m.metadata.get("created_by") == "flame_reflection"
                 ]
@@ -331,7 +331,7 @@ def run_experiment(
                     )
 
                 for query in RETRIEVAL_PROBES:
-                    retrieved = app.memory.retrieve(agent.id, query, limit=5)
+                    retrieved = app.flame.memory.retrieve(agent.id, query, limit=5)
                     retrieval_probes.append(
                         {
                             "condition": condition_name,
