@@ -43,6 +43,8 @@ Agent outputs always include confidence metadata. By default, `sessions.run(...)
 `v2.0.0` makes FLAME the primary memory system. Memory usage goes through `app.flame.memory`.
 Internally, FLAME is installed from the separate `flame-memory` package and imported as `flame_memory`; AgentOS wires it through adapters and keeps `app.flame.memory` as the SDK surface.
 
+See `docs/flame-external-memory-system.md` for the package boundary, adapter ownership, and release process.
+
 ## Agent Capability Tiers
 
 - `basic_agent`: short-term session context only, no long-term memory retrieval, no learning
