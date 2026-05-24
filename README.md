@@ -41,7 +41,7 @@ Breaking change in `v1.2.0`: candidate-era learning APIs are removed from stable
 Agent outputs always include confidence metadata. By default, `sessions.run(...)` retries one low-confidence `final` answer below `0.60` and asks the agent to either clarify missing information or return a better-supported answer.
 
 `v2.0.0` makes FLAME the primary memory system. Memory usage goes through `app.flame.memory`.
-Internally, FLAME now lives behind the standalone import boundary `flame_memory`; AgentOS wires it through adapters and keeps `app.flame.memory` as the SDK surface.
+Internally, FLAME is installed from the separate `flame-memory` package and imported as `flame_memory`; AgentOS wires it through adapters and keeps `app.flame.memory` as the SDK surface.
 
 ## Agent Capability Tiers
 

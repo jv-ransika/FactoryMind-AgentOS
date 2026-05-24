@@ -55,7 +55,7 @@ FactoryMind AgentOS `v2.0.0` defines a breaking stable contract where FLAME is t
 ## FLAME Memory System
 
 FLAME owns memory operations for AgentOS and future external agent clients.
-The implementation now lives behind the standalone Python import boundary `flame_memory`; `agent_os.flame` remains a compatibility shim.
+The implementation now lives in the separate `flame-memory` package and is imported as `flame_memory`; `agent_os.flame` remains a compatibility shim.
 
 Primary SDK calls:
 
